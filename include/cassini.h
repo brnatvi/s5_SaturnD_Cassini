@@ -6,8 +6,19 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <errno.h>
+#include <stdint.h>
+#include <fcntl.h>
+#include <endian.h>
+#include <unistd.h> 
 
 #include "client-request.h"
 #include "server-reply.h"
+
+#define CLOSE_FILE(File) if (File > 0) {close(File); File = -1;}
+#define FREE_MEM(Mem) if (Mem) {free(Mem); Mem = NULL;}
+
+
+int isBigEndian();
+int create_task(char * pipes_directory, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[]);
 
 #endif // CASSINI

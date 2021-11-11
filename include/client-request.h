@@ -9,4 +9,7 @@
 #define CLIENT_REQUEST_GET_STDOUT 0x534f              // 'SO'
 #define CLIENT_REQUEST_GET_STDERR 0x5345              // 'SE'
 
+#define CLIENT_REQUEST_HEADER_SIZE 2
+#define CLIENT_TIMING_SIZE         13
+
 #endif // CLIENT_REQUEST_H

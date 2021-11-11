@@ -1,4 +1,6 @@
 #include "cassini.h"
+#include "timing-text-io.h"
+#include "timing.h"
 
 const char usage_info[] = "\
    usage: cassini [OPTIONS] -l -> list all tasks\n\
@@ -19,13 +21,179 @@ const char usage_info[] = "\
      -p PIPES_DIR -> look for the pipes in PIPES_DIR (default: /tmp/<USERNAME>/saturnd/pipes)\n\
 ";
 
+// function to check if big endian on 
+int isBigEndian()
+{
+    uint16_t testVal = 1;
+    uint8_t *pTestVal = (uint8_t *)&testVal;
+    return (pTestVal[0] != 1) ? 0 : 1;
+}
+
+// function create task
+int create_task(char * pipes_directory, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[])
+{
+    int    retCode = EXIT_SUCCESS;
+    struct timing dest;
+    int    request = -1;
+    int    reply   = -1;
+    int    isBigE  = isBigEndian();         // check if need to convert to big endian
+
+    // find the length of request: request's pattern : OPCODE = 'CR' < uint16 >, TIMING<timing>, COMMANDLINE<commandline>
+    size_t count   = 2 * sizeof(char)
+                     + 13            //sizeof(dest) - we can't use sizeof because of different alignment depending on platform and compiler options
+                     + sizeof(uint32_t);
+
+    if (argc <= 1)
+    {
+        perror("no agruments provided");
+        return EXIT_FAILURE;
+    }
+
+    for (int i = 0; i < argc; i++)
+    {
+        count += sizeof(uint32_t) + strlen(argv[i]);
+    }
+
+    // create buffer for request
+    void *buf = malloc(count);
+    char *bufIter = (char *)buf;
+    if (!buf)
+    {
+        perror("can't allocate memory");
+        retCode = EXIT_FAILURE;
+    }
+
+    // open the pipes
+    if (EXIT_SUCCESS == retCode)
+    {
+        request = open("./run/pipes/saturnd-request-pipe", O_WRONLY);      //TODO Hardcode !! has to be corrected since saturnd will be developing
+        if (request < 0)
+        {
+            perror("open request-pipe failure");
+            retCode = EXIT_FAILURE;
+        }
+    }
+
+    if (EXIT_SUCCESS == retCode)
+    {
+        reply = open("./run/pipes/saturnd-reply-pipe", O_RDONLY);          //TODO Hardcode !! has to be corrected since saturnd will be developing
+        if (reply < 0)
+        {
+            perror("open reply-pipe failure");
+            retCode = EXIT_FAILURE;
+        }    
+    }
+
+    // filing the struct timing
+    if (EXIT_SUCCESS == retCode)
+    {
+        if (timing_from_strings(&dest, minutes_str, hours_str, daysofweek_str) < 0) 
+        {
+            perror("timing convertion failure");
+            retCode = EXIT_FAILURE;
+        }    
+    }
+    
+    // write request to buffer
+    if (EXIT_SUCCESS == retCode)
+    {        
+        uint16_t opCode = CLIENT_REQUEST_CREATE_TASK;    
+        memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
+        bufIter += CLIENT_REQUEST_HEADER_SIZE;
+
+        if (!isBigE)
+        {
+            dest.minutes = htobe64(dest.minutes);
+            dest.hours   = htobe32(dest.hours);
+        }
+        
+        memcpy(bufIter, &dest.minutes, sizeof(dest.minutes));
+        bufIter += sizeof(dest.minutes);
+        memcpy(bufIter, &dest.hours, sizeof(dest.hours));
+        bufIter += sizeof(dest.hours);
+        memcpy(bufIter, &dest.daysofweek, sizeof(dest.daysofweek));
+        bufIter += sizeof(dest.daysofweek);
+
+        uint32_t argsC = (uint32_t)argc;
+        if (!isBigE)
+        {
+            argsC = htobe32(argsC);
+        }
+        memcpy(bufIter, &argsC, sizeof(argsC));
+        bufIter += sizeof(argsC);
+
+        for (int i = 0; i < argc; i++)
+        {
+            uint32_t len = strlen(argv[i]);
+            uint32_t tmp = len;
+
+            if (!isBigE)
+            {
+                tmp = htobe32(len);
+            }
+
+            memcpy(bufIter, &tmp, sizeof(tmp));
+            bufIter += sizeof(len);
+            memcpy(bufIter, argv[i], len);
+            bufIter += len;
+        }
+
+        // write from buffer to pipe
+        ssize_t resRequest = write(request, buf, count);
+        if (resRequest < (ssize_t)count)
+        {
+            perror("write to pipe failure");
+            retCode = EXIT_FAILURE;
+        }
+    }
+
+    // read the answer of saturnd from reply pipe
+    // response's pattern : REPTYPE='OK' <uint16>, TASKID <uint64>
+    if (EXIT_SUCCESS == retCode)
+    {            
+        const int lenAnswer = sizeof(uint16_t) + sizeof(uint64_t);
+        uint8_t   bufReply[lenAnswer];
+        while (1)
+        {
+            ssize_t rezRead = read(reply, bufReply, lenAnswer);
+            if (0 == rezRead)                       // no answer, continue to listening
+            {
+                continue;
+            }
+            else if (rezRead == lenAnswer)          // check if approved response
+            {
+                // if first 2 bytes = 'OK' it's approved answer
+                if (*(uint16_t*)bufReply != SERVER_REPLY_OK)
+                {
+                    perror("not approved response");
+                    retCode = EXIT_FAILURE;
+                }
+                break;                              // correct response            
+            }
+            else                                    // error
+            {
+                perror("read from pipe-reply failure");
+                retCode = EXIT_FAILURE;
+                break;
+            }        
+        }
+    }
+
+    // free memory & close pipes
+    FREE_MEM(buf);    
+    CLOSE_FILE(request);
+    CLOSE_FILE(reply);
+
+    return retCode;
+}
+
 int main(int argc, char * argv[]) {
   errno = 0;
   
   char * minutes_str = "*";
   char * hours_str = "*";
   char * daysofweek_str = "*";
-  char * pipes_directory = NULL;
+  char * pipes_directory = NULL;  
   
   uint16_t operation = CLIENT_REQUEST_LIST_TASKS;
   uint64_t taskid;
@@ -85,9 +253,12 @@ int main(int argc, char * argv[]) {
     }
   }
 
-  // --------
-  // | TODO |
-  // --------
+  if (NULL == pipes_directory)
+  {
+      char * username = getlogin();            
+  }
+
+  create_task(pipes_directory, minutes_str, hours_str, daysofweek_str, argc, argv);
   
   return EXIT_SUCCESS;
 
