@@ -19,6 +19,7 @@
 
 
 int isBigEndian();
-int create_task(char * pipes_directory, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[]);
+char * create_path(char *pipes_directory, int isRequets);
+int create_task(int request, int reply, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[]);
 
 #endif // CASSINI
