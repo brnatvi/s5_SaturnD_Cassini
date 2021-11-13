@@ -77,7 +77,7 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
     size_t count = 2 * sizeof(char) + 13 //sizeof(dest) - we can't use sizeof because of different alignment depending on platform and compiler options
                    + sizeof(uint32_t);
 
-    if (argc <= 1)
+    if (argc < 1)
     {
         perror("no agruments provided");
         return EXIT_FAILURE;
