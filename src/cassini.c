@@ -30,7 +30,7 @@ int isBigEndian()
 }
 
 // function to create paths for request-pipe and reply-pipe
-char * create_path(char *pipes_directory, int isRequets)
+char *create_path(char *pipes_directory, int isRequets)
 {
     char *pResult = NULL;
 
@@ -41,17 +41,17 @@ char * create_path(char *pipes_directory, int isRequets)
         pipes_directory = pPrefix;
     }
 
-    const char *pDirPostfix =  NULL;
-    size_t      szPipeDir = 0;
+    const char *pDirPostfix = NULL;
+    size_t szPipeDir = 0;
 
     if (isRequets)
     {
-        pDirPostfix =  "/saturnd-request-pipe";
+        pDirPostfix = "/saturnd-request-pipe";
         szPipeDir = strlen(pipes_directory) + strlen(pDirPostfix) + 1;
     }
     else
     {
-        pDirPostfix =  "/saturnd-reply-pipe";
+        pDirPostfix = "/saturnd-reply-pipe";
         szPipeDir = strlen(pipes_directory) + strlen(pDirPostfix) + 1;
     }
 
@@ -70,7 +70,7 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
 {
     int retCode = EXIT_SUCCESS;
     struct timing dest;
-    
+
     int isBigE = isBigEndian(); // check if need to convert to big endian
 
     // find the length of request: request's pattern : OPCODE = 'CR' < uint16 >, TIMING<timing>, COMMANDLINE<commandline>
@@ -112,7 +112,7 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
         uint16_t opCode = CLIENT_REQUEST_CREATE_TASK;
         if (!isBigE)
         {
-            opCode = htobe16(opCode);    
+            opCode = htobe16(opCode);
         }
 
         memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
@@ -180,12 +180,12 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
             else if (rezRead == lenAnswer) // check if correct response
             {
                 uint16_t ResCode = *(uint16_t *)bufReply;
-                uint64_t uTaskId = *(uint64_t*)(bufReply + 2);
+                uint64_t uTaskId = *(uint64_t *)(bufReply + 2);
 
                 if (!isBigE)
                 {
                     ResCode = htobe16(ResCode);
-                    uTaskId = htobe64(uTaskId);    
+                    uTaskId = htobe64(uTaskId);
                 }
 
                 // if first 2 bytes = 'OK' it's approved answer
@@ -218,6 +218,7 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
 int main(int argc, char *argv[])
 {
     errno = 0;
+    int ret = EXIT_SUCCESS;
 
     char *minutes_str = "*";
     char *hours_str = "*";
@@ -251,7 +252,10 @@ int main(int argc, char *argv[])
         case 'p':
             pipes_directory = strdup(optarg);
             if (pipes_directory == NULL)
+            {
+                ret = EXIT_FAILURE;
                 goto error;
+            }
             break;
         case 'l':
             operation = CLIENT_REQUEST_LIST_TASKS;
@@ -266,25 +270,37 @@ int main(int argc, char *argv[])
             operation = CLIENT_REQUEST_REMOVE_TASK;
             taskid = strtoull(optarg, &strtoull_endp, 10);
             if (strtoull_endp == optarg || strtoull_endp[0] != '\0')
+            {
+                ret = EXIT_FAILURE;
                 goto error;
+            }
             break;
         case 'x':
             operation = CLIENT_REQUEST_GET_TIMES_AND_EXITCODES;
             taskid = strtoull(optarg, &strtoull_endp, 10);
             if (strtoull_endp == optarg || strtoull_endp[0] != '\0')
+            {
+                ret = EXIT_FAILURE;
                 goto error;
+            }
             break;
         case 'o':
             operation = CLIENT_REQUEST_GET_STDOUT;
             taskid = strtoull(optarg, &strtoull_endp, 10);
             if (strtoull_endp == optarg || strtoull_endp[0] != '\0')
+            {
+                ret = EXIT_FAILURE;
                 goto error;
+            }
             break;
         case 'e':
             operation = CLIENT_REQUEST_GET_STDERR;
             taskid = strtoull(optarg, &strtoull_endp, 10);
             if (strtoull_endp == optarg || strtoull_endp[0] != '\0')
+            {
+                ret = EXIT_FAILURE;
                 goto error;
+            }
             break;
         case 'h':
             printf("%s", usage_info);
@@ -301,25 +317,26 @@ int main(int argc, char *argv[])
     if ((!pipe_dir_req) || (!pipe_dir_rep))
     {
         perror("can't allocate memory!");
+        ret = EXIT_FAILURE;
         goto error;
-    }    
+    }
 
     // obtain fd for reply-pipe and request-pipe
-    pipe_req = open(pipe_dir_req, O_WRONLY); 
-    pipe_rep = open(pipe_dir_rep, O_RDONLY); 
+    pipe_req = open(pipe_dir_req, O_WRONLY);
+    pipe_rep = open(pipe_dir_rep, O_RDONLY);
     if ((pipe_req < 0) || (pipe_rep < 0))
     {
         perror("open request-pipe failure");
+        ret = EXIT_FAILURE;
         goto error;
-    }  
+    }
 
     switch (operation)
     {
-        case CLIENT_REQUEST_CREATE_TASK:
-            create_task(pipe_req, pipe_rep, minutes_str, hours_str, daysofweek_str, argc - 4, argv + 4);
+    case CLIENT_REQUEST_CREATE_TASK:
+        create_task(pipe_req, pipe_rep, minutes_str, hours_str, daysofweek_str, argc - optind, &argv[optind]);
+        break;
     }
-    
-    return EXIT_SUCCESS;
 
 error:
     if (errno != 0)
@@ -333,5 +350,5 @@ error:
     CLOSE_FILE(pipe_req);
     CLOSE_FILE(pipe_rep);
 
-    return EXIT_FAILURE;
+    return ret;
 }
