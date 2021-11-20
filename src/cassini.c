@@ -67,8 +67,10 @@ char *create_path(char *pipes_directory, int isRequets)
     return pResult;
 }
 
+// function list task
 int list_task(int request, int reply){
     int retCode = EXIT_SUCCESS;
+
     // check if need to convert to big endian
     int isBigE = isBigEndian();
 
@@ -119,6 +121,7 @@ int list_task(int request, int reply){
                     if (readBufTask==0) continue;
                     else if(sizeof(uint64_t)+CLIENT_TIMING_SIZE+ sizeof(uint32_t) == readBufTask){
 
+                        //retrieve the different tasks
                         for (int m = 0; m < numberProcess; ++m) {
                             uint64_t taskid=*(uint64_t *)(tabTasks);
                             uint64_t timingMin=*(uint64_t *)(tabTasks +8);
@@ -133,11 +136,22 @@ int list_task(int request, int reply){
                                 cmdArgc= htobe32(cmdArgc);
                             }
 
+                            //convert timing to string
+                            struct timing t={
+                                    .minutes=timingMin,
+                                    .hours=timingHou,
+                                    .daysofweek=timingDay
+                            };
+                            char number_str[TIMING_TEXT_MIN_BUFFERSIZE];
+                            timing_string_from_timing(number_str, &t);
+
+                            //the number of arguments per task must be at least one
                             if (cmdArgc<1){
                                 perror("cmdArgc in commandline");
                                 retCode = EXIT_FAILURE;
                             }
 
+                            //retrieve all the arguments of the task
                             char *result= malloc(sizeof(char));
                             uint8_t bufsizeword[sizeof(uint32_t)];
                             for (int i = 0; i < cmdArgc; ++i) {
@@ -148,10 +162,13 @@ int list_task(int request, int reply){
                                     break;
                                 }
 
+                                //get the size of one of the arguments
                                 uint32_t sizeofword = *(uint32_t *)(bufsizeword);
                                 if (!isBigE){
                                     sizeofword= htobe32(sizeofword);
                                 }
+
+                                //Get an argument
                                 uint8_t bufword[sizeofword];
                                 ssize_t readword = read(reply, bufword, sizeofword);
                                 if (readword==-1){
@@ -159,46 +176,39 @@ int list_task(int request, int reply){
                                     retCode = EXIT_FAILURE;
                                     break;
                                 }
+                                char currArgument[sizeofword+1];
+                                for (int j = 0; j < sizeofword; ++j)currArgument[j]=(char)(*(uint8_t *)(bufword+j));
+                                currArgument[sizeofword]='\0';
 
-                                char str[sizeofword+1];
-                                for (int j = 0; j < sizeofword; ++j)str[j]=(char)(*(uint8_t *)(bufword+j));
-                                str[sizeofword]='\0';
-
-                                size_t const l1 = strlen(result) ;
-                                size_t const l2 = strlen(str) ;
-
-                                void *realval = realloc(result, strlen(result) + strlen(str) + 1);
+                                //Concatenate arguments
+                                size_t const sizeOfAllArg = strlen(result) ;
+                                size_t const sizeOfCurrArg = strlen(currArgument) ;
+                                void *realval = realloc(result, strlen(result) + strlen(currArgument) + 1);
                                 if (!realval){
                                     perror("realloc failure");
                                     retCode = EXIT_FAILURE;
                                     break;
                                 }
-
-                                memcpy(result, result, l1) ;
-                                if (l1!=0){
+                                memcpy(result, result, sizeOfAllArg) ;
+                                if (sizeOfAllArg!=0){
                                     char *empt=" ";
                                     strcat(result, empt);
-                                    memcpy(result + l1 +1, str, l2 + 1);
-                                }else memcpy(result + l1, str, l2 + 1);
-
+                                    memcpy(result + sizeOfAllArg +1, currArgument, sizeOfCurrArg + 1);
+                                }else memcpy(result + sizeOfAllArg, currArgument, sizeOfCurrArg + 1);
                             }
 
-                            struct timing t={
-                                    .minutes=timingMin,
-                                    .hours=timingHou,
-                                    .daysofweek=timingDay
-                            };
-
-                            char number_str[TIMING_TEXT_MIN_BUFFERSIZE];
-                            timing_string_from_timing(number_str, &t);
+                            //display the task
                             printf("%lu: %s %s\n",taskid,number_str,result);
-                            readBufTask = read(reply, tabTasks, sizeof(uint64_t)+CLIENT_TIMING_SIZE+ sizeof(uint32_t));
-                            if (readBufTask==-1){
-                                perror("read from pipe-reply failure");
-                                retCode = EXIT_FAILURE;
-                                break;
-                            }
-                            if (m==numberProcess-1)FREE_MEM(result);
+
+                            //get the next argument
+                            if (m!=numberProcess-1){
+                                readBufTask = read(reply, tabTasks, sizeof(uint64_t)+CLIENT_TIMING_SIZE+ sizeof(uint32_t));
+                                if (readBufTask==-1){
+                                    perror("read from pipe-reply failure");
+                                    retCode = EXIT_FAILURE;
+                                    break;
+                                }
+                            } else FREE_MEM(result);
                         }
                         break;
                     }else{
