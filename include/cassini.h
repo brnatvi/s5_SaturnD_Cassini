@@ -9,7 +9,8 @@
 #include <stdint.h>
 #include <fcntl.h>
 #include <endian.h>
-#include <unistd.h> 
+#include <unistd.h>
+#include <time.h>
 
 #include "client-request.h"
 #include "server-reply.h"
@@ -22,5 +23,6 @@ int isBigEndian();
 char * create_path(char *pipes_directory, int isRequets);
 int create_task(int request, int reply, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[]);
 int list_task(int request, int reply);
+int times_exitcodes(int request, int reply, uint64_t taskid);
 
 #endif // CASSINI
