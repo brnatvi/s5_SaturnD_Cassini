@@ -67,6 +67,125 @@ char *create_path(char *pipes_directory, int isRequets)
     return pResult;
 }
 
+// function times exitcodes
+int times_exitcodes(int request, int reply, uint64_t taskid){
+    int retCode = EXIT_SUCCESS;
+
+    // check if need to convert to big endian
+    int isBigE = isBigEndian();
+
+    // create buffer for request
+    void *buf = malloc(2+ sizeof(uint64_t));
+    char *bufIter = (char *)buf;
+    if (!buf){
+        perror("can't allocate memory");
+        retCode = EXIT_FAILURE;
+    }
+
+    // write request to buffer
+    if (EXIT_SUCCESS == retCode){
+        uint16_t opCode = CLIENT_REQUEST_GET_TIMES_AND_EXITCODES;
+        uint64_t tId = taskid;
+        if (!isBigE){
+            opCode = htobe16(opCode);
+            tId = htobe64(tId);
+        }
+
+        //TODO: /!\ malformed request
+        memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
+        bufIter += CLIENT_REQUEST_HEADER_SIZE;
+        //bufIter += 1; //CLIENT_REQUEST_HEADER_SIZE; // 1;
+        //bufIter += sizeof(uint64_t);
+        memcpy(bufIter, &taskid, sizeof(uint64_t));
+        bufIter += sizeof(uint64_t);
+
+        // write from buffer to pipe
+        ssize_t resRequest = write(request, buf, 2+ sizeof(uint64_t));
+        if (resRequest!=2+sizeof(uint64_t)){
+            perror("write to pipe failure");
+            retCode = EXIT_FAILURE;
+        }
+    }
+
+
+    if (EXIT_SUCCESS == retCode){
+
+        const int lenAnswer = sizeof(uint16_t);
+        uint8_t bufReply[lenAnswer];
+        while (1){
+            ssize_t rezRead = read(reply, bufReply, lenAnswer);
+            if (0 == rezRead) continue; // no answer, continue to listening
+            else if (rezRead == lenAnswer){ // check if correct response
+                uint16_t ResCode = *(uint16_t *)bufReply;
+                if (!isBigE){
+                    ResCode = htobe16(ResCode);
+                }
+
+                if (ResCode == SERVER_REPLY_OK){
+                    const int lenAnswerNB = sizeof(uint32_t);
+                    uint8_t bufReplyNB[lenAnswerNB];
+                    while (1){
+                        ssize_t rezReadNB = read(reply, bufReplyNB, lenAnswerNB);
+                        if (0 == rezReadNB) continue; // no answer, continue to listening
+                        else if (rezReadNB == lenAnswerNB){ // check if correct response
+                            uint32_t nbruns = *(uint32_t *)bufReplyNB;
+                            if (!isBigE){
+                                nbruns = htobe32(nbruns);
+                            }
+
+                            //browse multiple tasks
+                            const int lenAnswerOk = sizeof(uint64_t) + sizeof(uint16_t);
+                            uint8_t bufReplyOk[lenAnswerOk];
+                            for (int i = 0; i < nbruns; ++i) {
+
+                                //retrieve the time spent by task and its id
+                                while (1){
+                                    ssize_t rezRead = read(reply, bufReplyOk, lenAnswerOk);
+                                    if (0 == rezRead) continue; // no answer, continue to listening
+                                    else if (rezRead == lenAnswerOk){ // check if correct response
+                                        uint64_t timepass = *(uint64_t *)bufReplyOk;
+                                        uint16_t exitcode = *(uint16_t *)(bufReplyOk + 8);
+
+                                        if (!isBigE){
+                                            timepass = htobe64(timepass);
+                                            exitcode = htobe16(exitcode);
+                                        }
+
+                                        //convert seconds to a date as a string
+                                        struct tm *info;
+                                        char buffer[80];
+                                        info = localtime( &timepass );
+                                        strftime(buffer,80,"%Y-%m-%d %X", info);
+
+                                        printf("%s %hu\n",buffer ,exitcode);
+                                        break;
+                                    }else{ // error
+                                        perror("read from pipe-reply failure");
+                                        retCode = EXIT_FAILURE;
+                                        break;
+                                    }
+                                }
+                            }
+                        }else{
+                            perror("read from pipe-reply failure");
+                            retCode = EXIT_FAILURE;
+                            break;
+                        }
+                        break;
+                    }
+                }else exit(1);
+            }else{
+                perror("read from pipe-reply failure");
+                retCode = EXIT_FAILURE;
+                break;
+            }
+            break;
+        }
+    }
+    FREE_MEM(buf);
+    return retCode;
+}
+
 // function list task
 int list_task(int request, int reply){
     int retCode = EXIT_SUCCESS;
@@ -502,6 +621,9 @@ int main(int argc, char *argv[])
         break;
     case CLIENT_REQUEST_LIST_TASKS:
         list_task(pipe_req, pipe_rep);
+        break;
+    case CLIENT_REQUEST_GET_TIMES_AND_EXITCODES:
+        times_exitcodes(pipe_req, pipe_rep, taskid);
         break;
     }
 
