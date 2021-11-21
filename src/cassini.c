@@ -91,12 +91,9 @@ int times_exitcodes(int request, int reply, uint64_t taskid){
             tId = htobe64(tId);
         }
 
-        //TODO: /!\ malformed request
         memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
         bufIter += CLIENT_REQUEST_HEADER_SIZE;
-        //bufIter += 1; //CLIENT_REQUEST_HEADER_SIZE; // 1;
-        //bufIter += sizeof(uint64_t);
-        memcpy(bufIter, &taskid, sizeof(uint64_t));
+        memcpy(bufIter, &tId, sizeof(uint64_t));
         bufIter += sizeof(uint64_t);
 
         // write from buffer to pipe
