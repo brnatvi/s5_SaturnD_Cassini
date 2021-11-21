@@ -21,5 +21,6 @@
 int isBigEndian();
 char * create_path(char *pipes_directory, int isRequets);
 int create_task(int request, int reply, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[]);
+int terminate(int request,int reply);
 
 #endif // CASSINI
