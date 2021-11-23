@@ -29,8 +29,6 @@ int isBigEndian()
     return (pTestVal[0] != 1) ? 1 : 0;
 }
 
-
-
 // function to create paths for request-pipe and reply-pipe
 char *create_path(char *pipes_directory, int isRequets)
 {
@@ -68,24 +66,25 @@ char *create_path(char *pipes_directory, int isRequets)
 }
 
 // function list task
-int list_task(int request, int reply){
+int list_task(int request, int reply, int isBigE)
+{
     int retCode = EXIT_SUCCESS;
-
-    // check if need to convert to big endian
-    int isBigE = isBigEndian();
 
     // create buffer for request
     void *buf = malloc(2);
     char *bufIter = (char *)buf;
-    if (!buf){
+    if (!buf)
+    {
         perror("can't allocate memory");
         retCode = EXIT_FAILURE;
     }
 
     // write request to buffer
-    if (EXIT_SUCCESS == retCode){
+    if (EXIT_SUCCESS == retCode)
+    {
         uint16_t opCode = CLIENT_REQUEST_LIST_TASKS;
-        if (!isBigE){
+        if (!isBigE)
+        {
             opCode = htobe16(opCode);
         }
 
@@ -94,69 +93,82 @@ int list_task(int request, int reply){
 
         // write from buffer to pipe
         ssize_t resRequest = write(request, buf, 2);
-        if (resRequest!=2){
+        if (resRequest != 2)
+        {
             perror("write to pipe failure");
             retCode = EXIT_FAILURE;
         }
     }
 
     //read request to pipe
-    if (EXIT_SUCCESS == retCode){
-        const int lenResponse= sizeof(uint16_t) + sizeof(uint32_t);
+    if (EXIT_SUCCESS == retCode)
+    {
+        const int lenResponse = sizeof(uint16_t) + sizeof(uint32_t);
         uint8_t bufResponse[lenResponse];
-        while (1){
+        while (1)
+        {
             ssize_t readBuf = read(reply, bufResponse, lenResponse);
-            if (readBuf==0) continue;
-            else if(lenResponse == readBuf){
+            if (readBuf == 0)
+                continue;
+            else if (lenResponse == readBuf)
+            {
                 uint16_t responseOK = *(uint16_t *)bufResponse;
                 uint32_t numberProcess = *(uint32_t *)(bufResponse + 2);
-                if (!isBigE){
-                    responseOK= htobe16(responseOK);
-                    numberProcess= htobe32(numberProcess);
+                if (!isBigE)
+                {
+                    responseOK = htobe16(responseOK);
+                    numberProcess = htobe32(numberProcess);
                 }
 
-                uint8_t tabTasks[sizeof(uint64_t)+CLIENT_TIMING_SIZE+ sizeof(uint32_t)];
-                while (numberProcess != 0 != 0){
-                    ssize_t readBufTask = read(reply, tabTasks, sizeof(uint64_t)+CLIENT_TIMING_SIZE+ sizeof(uint32_t));
-                    if (readBufTask==0) continue;
-                    else if(sizeof(uint64_t)+CLIENT_TIMING_SIZE+ sizeof(uint32_t) == readBufTask){
+                uint8_t tabTasks[sizeof(uint64_t) + CLIENT_TIMING_SIZE + sizeof(uint32_t)];
+                while (numberProcess != 0 != 0)
+                {
+                    ssize_t readBufTask = read(reply, tabTasks, sizeof(uint64_t) + CLIENT_TIMING_SIZE + sizeof(uint32_t));
+                    if (readBufTask == 0)
+                        continue;
+                    else if (sizeof(uint64_t) + CLIENT_TIMING_SIZE + sizeof(uint32_t) == readBufTask)
+                    {
 
                         //retrieve the different tasks
-                        for (int m = 0; m < numberProcess; ++m) {
-                            uint64_t taskid=*(uint64_t *)(tabTasks);
-                            uint64_t timingMin=*(uint64_t *)(tabTasks +8);
-                            uint32_t timingHou=*(uint32_t *)(tabTasks +8+8);
-                            uint8_t timingDay=*(uint8_t *)(tabTasks +8+8+4);
-                            uint32_t cmdArgc=*(uint32_t *)(tabTasks +8+8+4+1);
+                        for (int m = 0; m < numberProcess; ++m)
+                        {
+                            uint64_t taskid = *(uint64_t *)(tabTasks);
+                            uint64_t timingMin = *(uint64_t *)(tabTasks + 8);
+                            uint32_t timingHou = *(uint32_t *)(tabTasks + 8 + 8);
+                            uint8_t timingDay = *(uint8_t *)(tabTasks + 8 + 8 + 4);
+                            uint32_t cmdArgc = *(uint32_t *)(tabTasks + 8 + 8 + 4 + 1);
 
-                            if (!isBigE){
-                                taskid= htobe64(taskid);
-                                timingMin= htobe64(timingMin);
-                                timingHou= htobe32(timingHou);
-                                cmdArgc= htobe32(cmdArgc);
+                            if (!isBigE)
+                            {
+                                taskid = htobe64(taskid);
+                                timingMin = htobe64(timingMin);
+                                timingHou = htobe32(timingHou);
+                                cmdArgc = htobe32(cmdArgc);
                             }
 
                             //convert timing to string
-                            struct timing t={
-                                    .minutes=timingMin,
-                                    .hours=timingHou,
-                                    .daysofweek=timingDay
-                            };
+                            struct timing t = {
+                                .minutes = timingMin,
+                                .hours = timingHou,
+                                .daysofweek = timingDay};
                             char number_str[TIMING_TEXT_MIN_BUFFERSIZE];
                             timing_string_from_timing(number_str, &t);
 
                             //the number of arguments per task must be at least one
-                            if (cmdArgc<1){
+                            if (cmdArgc < 1)
+                            {
                                 perror("cmdArgc in commandline");
                                 retCode = EXIT_FAILURE;
                             }
 
                             //retrieve all the arguments of the task
-                            char *result= malloc(sizeof(char));
+                            char *result = malloc(sizeof(char));
                             uint8_t bufsizeword[sizeof(uint32_t)];
-                            for (int i = 0; i < cmdArgc; ++i) {
+                            for (int i = 0; i < cmdArgc; ++i)
+                            {
                                 ssize_t readsize = read(reply, bufsizeword, sizeof(uint32_t));
-                                if (readsize==-1){
+                                if (readsize == -1)
+                                {
                                     perror("read from pipe-reply failure");
                                     retCode = EXIT_FAILURE;
                                     break;
@@ -164,61 +176,76 @@ int list_task(int request, int reply){
 
                                 //get the size of one of the arguments
                                 uint32_t sizeofword = *(uint32_t *)(bufsizeword);
-                                if (!isBigE){
-                                    sizeofword= htobe32(sizeofword);
+                                if (!isBigE)
+                                {
+                                    sizeofword = htobe32(sizeofword);
                                 }
 
                                 //Get an argument
                                 uint8_t bufword[sizeofword];
                                 ssize_t readword = read(reply, bufword, sizeofword);
-                                if (readword==-1){
+                                if (readword == -1)
+                                {
                                     perror("read from pipe-reply failure");
                                     retCode = EXIT_FAILURE;
                                     break;
                                 }
-                                char currArgument[sizeofword+1];
-                                for (int j = 0; j < sizeofword; ++j)currArgument[j]=(char)(*(uint8_t *)(bufword+j));
-                                currArgument[sizeofword]='\0';
+                                char currArgument[sizeofword + 1];
+                                for (int j = 0; j < sizeofword; ++j)
+                                    currArgument[j] = (char)(*(uint8_t *)(bufword + j));
+                                currArgument[sizeofword] = '\0';
 
                                 //Concatenate arguments
-                                size_t const sizeOfAllArg = strlen(result) ;
-                                size_t const sizeOfCurrArg = strlen(currArgument) ;
+                                size_t const sizeOfAllArg = strlen(result);
+                                size_t const sizeOfCurrArg = strlen(currArgument);
                                 void *realval = realloc(result, strlen(result) + strlen(currArgument) + 1);
-                                if (!realval){
+                                if (!realval)
+                                {
                                     perror("realloc failure");
                                     retCode = EXIT_FAILURE;
                                     break;
                                 }
-                                memcpy(result, result, sizeOfAllArg) ;
-                                if (sizeOfAllArg!=0){
-                                    char *empt=" ";
+                                memcpy(result, result, sizeOfAllArg);
+                                if (sizeOfAllArg != 0)
+                                {
+                                    char *empt = " ";
                                     strcat(result, empt);
-                                    memcpy(result + sizeOfAllArg +1, currArgument, sizeOfCurrArg + 1);
-                                }else memcpy(result + sizeOfAllArg, currArgument, sizeOfCurrArg + 1);
+                                    memcpy(result + sizeOfAllArg + 1, currArgument, sizeOfCurrArg + 1);
+                                }
+                                else
+                                    memcpy(result + sizeOfAllArg, currArgument, sizeOfCurrArg + 1);
                             }
 
                             //display the task
-                            printf("%lu: %s %s\n",taskid,number_str,result);
+                            printf("%lu: %s %s\n", taskid, number_str, result);
 
                             //get the next argument
-                            if (m!=numberProcess-1){
-                                readBufTask = read(reply, tabTasks, sizeof(uint64_t)+CLIENT_TIMING_SIZE+ sizeof(uint32_t));
-                                if (readBufTask==-1){
+                            if (m != numberProcess - 1)
+                            {
+                                readBufTask = read(reply, tabTasks, sizeof(uint64_t) + CLIENT_TIMING_SIZE + sizeof(uint32_t));
+                                if (readBufTask == -1)
+                                {
                                     perror("read from pipe-reply failure");
                                     retCode = EXIT_FAILURE;
                                     break;
                                 }
-                            } else FREE_MEM(result);
+                            }
+                            else
+                                FREE_MEM(result);
                         }
                         break;
-                    }else{
+                    }
+                    else
+                    {
                         perror("read from");
                         retCode = EXIT_FAILURE;
                         break;
                     }
                 }
                 break;
-            }else{
+            }
+            else
+            {
                 perror("read from");
                 retCode = EXIT_FAILURE;
                 break;
@@ -230,12 +257,10 @@ int list_task(int request, int reply){
 }
 
 // function create task
-int create_task(int request, int reply, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[])
+int create_task(int request, int reply, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[], int isBigE)
 {
     int retCode = EXIT_SUCCESS;
     struct timing dest;
-
-    int isBigE = isBigEndian(); // check if need to convert to big endian
 
     // find the length of request: request's pattern : OPCODE = 'CR' < uint16 >, TIMING<timing>, COMMANDLINE<commandline>
     size_t count = 2 * sizeof(char) + 13 //sizeof(dest) - we can't use sizeof because of different alignment depending on platform and compiler options
@@ -379,6 +404,12 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
     return retCode;
 }
 
+// function remove task
+int remove_task(int request, int reply, int argc, char *argv[], int isBigE)
+{    
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     errno = 0;
@@ -495,13 +526,16 @@ int main(int argc, char *argv[])
         goto error;
     }
 
+    // check if need to convert to big endian
+    int isBigE = isBigEndian();
+
     switch (operation)
     {
     case CLIENT_REQUEST_CREATE_TASK:
-        create_task(pipe_req, pipe_rep, minutes_str, hours_str, daysofweek_str, argc - optind, &argv[optind]);
+        create_task(pipe_req, pipe_rep, minutes_str, hours_str, daysofweek_str, argc - optind, &argv[optind], isBigE);
         break;
     case CLIENT_REQUEST_LIST_TASKS:
-        list_task(pipe_req, pipe_rep);
+        list_task(pipe_req, pipe_rep, isBigE);
         break;
     }
 
