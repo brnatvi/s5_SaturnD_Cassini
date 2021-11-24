@@ -379,6 +379,69 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
     return retCode;
 }
 
+
+// function terminate
+int terminate(int request, int reply)
+{
+    int retCode = EXIT_SUCCESS;
+    int isBigE = isBigEndian();
+    size_t count = sizeof(uint16_t);
+    void *buf = malloc(count);
+    char *bufIter = (char *)buf;
+    if (!buf)
+    {
+        perror("can't allocate memory");
+        retCode = EXIT_FAILURE;
+    }
+    if (EXIT_SUCCESS == retCode) {
+        uint16_t opCode = CLIENT_REQUEST_TERMINATE;
+        if (!isBigE) {
+            opCode = htobe16(opCode);
+        }
+
+        memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
+        bufIter += CLIENT_REQUEST_HEADER_SIZE;
+        ssize_t resRequest = write(request, buf, count);
+        if (resRequest < (ssize_t) count) {
+            perror("write to pipe failure");
+            retCode = EXIT_FAILURE;
+        }
+    }
+    if (EXIT_SUCCESS == retCode) {
+        const int lenAnswer = sizeof(uint16_t);
+        uint8_t bufReply[lenAnswer];
+        while (1) {
+            ssize_t rezRead = read(reply, bufReply, lenAnswer);
+            if (0 == rezRead) // no answer, continue to listening
+            {
+                continue;
+            } else if (rezRead == lenAnswer) // check if correct response
+            {
+                uint16_t ResCode = *(uint16_t *) bufReply;
+
+                if (!isBigE) {
+                    ResCode = htobe16(ResCode);
+                }
+
+                // if first 2 bytes = 'OK' it's approved answer
+                if (ResCode != SERVER_REPLY_OK) {
+                    perror("not approved response");
+                    retCode = EXIT_FAILURE;
+                    break;
+                }
+                break; // correct response
+            } else // error
+            {
+                perror("read from pipe-reply failure");
+                retCode = EXIT_FAILURE;
+                break;
+            }
+        }
+    }
+    FREE_MEM(buf);
+    return retCode;
+}
+
 int main(int argc, char *argv[])
 {
     errno = 0;
@@ -499,6 +562,9 @@ int main(int argc, char *argv[])
     {
     case CLIENT_REQUEST_CREATE_TASK:
         create_task(pipe_req, pipe_rep, minutes_str, hours_str, daysofweek_str, argc - optind, &argv[optind]);
+        break;
+    case CLIENT_REQUEST_TERMINATE:
+        terminate(pipe_req,pipe_rep);
         break;
     case CLIENT_REQUEST_LIST_TASKS:
         list_task(pipe_req, pipe_rep);
