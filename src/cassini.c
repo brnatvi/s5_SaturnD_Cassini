@@ -471,15 +471,13 @@ int remove_task(int request, int reply, uint64_t taskid, int isBigE) {
 
 
 // function terminate
-int terminate(int request, int reply)
+int terminate(int request, int reply, int isBigE)
 {
     int retCode = EXIT_SUCCESS;
-    int isBigE = isBigEndian();
     size_t count = sizeof(uint16_t);
     void *buf = malloc(count);
     char *bufIter = (char *)buf;
-    if (!buf)
-    {
+    if (!buf) {
         perror("can't allocate memory");
         retCode = EXIT_FAILURE;
     }
@@ -654,7 +652,7 @@ int main(int argc, char *argv[]) {
             remove_task(pipe_req, pipe_rep, taskid, isBigE);
             break;
         case CLIENT_REQUEST_TERMINATE:
-            terminate(pipe_req,pipe_rep);
+            terminate(pipe_req, pipe_rep, isBigE);
             break;
     }
 
