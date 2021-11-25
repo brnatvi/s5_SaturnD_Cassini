@@ -379,6 +379,80 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
     return retCode;
 }
 
+// function stdout_stderr
+int rq_stdout_stderr(int request, int reply, uint64_t taskid,uint16_t operation) {
+    int retCode = EXIT_SUCCESS;
+    int isBigE = isBigEndian();
+    size_t count = sizeof(uint16_t)+sizeof(uint64_t);
+    void *buf = malloc(count);
+    char *bufIter = (char *)buf;
+    if (!buf) {
+        perror("can't allocate memory");
+        retCode = EXIT_FAILURE;
+    }
+    if (EXIT_SUCCESS == retCode) {
+        uint16_t opCode = operation;
+        uint64_t id = taskid;
+        if (!isBigE) {
+            opCode = htobe16(opCode);
+            id = htobe64(taskid);
+        }
+
+        memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
+        bufIter += CLIENT_REQUEST_HEADER_SIZE;
+        memcpy(bufIter, &id, sizeof(uint64_t));
+        bufIter += sizeof(uint64_t);
+        ssize_t resRequest = write(request, buf, count);
+        if (resRequest < (ssize_t) count) {
+            perror("write to pipe failure");
+            retCode = EXIT_FAILURE;
+        }
+    }
+    if (EXIT_SUCCESS == retCode) {
+        const int lenAnswer = sizeof(uint16_t)+sizeof(uint32_t);
+        uint8_t bufReply[lenAnswer];
+        while (1) {
+            ssize_t resRead = read(reply, bufReply, lenAnswer);
+            if (0 == resRead) {
+                continue;
+            } else if (resRead == lenAnswer ) {
+                uint16_t ResCode = *(uint16_t *) bufReply;
+                uint32_t length = *(uint32_t * )(bufReply + sizeof(uint16_t));
+
+                if (!isBigE) {
+                    ResCode = htobe16(ResCode);
+                    length = htobe32(length);
+                }
+                if (ResCode == SERVER_REPLY_ERROR) {
+                    uint8_t buffReply[sizeof(uint16_t)*2];
+                    ssize_t resRead = read(reply, buffReply, sizeof(uint16_t)*2);
+                    if(resRead!=sizeof(uint16_t)*2) {
+                        uint16_t codeErr = *(uint16_t *) buffReply + 2;
+                        if (!isBigE)
+                            codeErr = htobe16(codeErr);
+                        printf("%d",codeErr);
+                    }else{
+                        perror("read from pipe-reply failure");
+                    }
+
+                    break;
+                }else {
+                    uint8_t buffer[length];
+                    ssize_t readString = read(reply, buffer, length);
+                    printf("%s", buffer);
+                    break; // correct response
+                }
+            } else { //error
+                perror("read from pipe-reply failure");
+                retCode = EXIT_FAILURE;
+                break;
+            }
+        }
+    }
+    FREE_MEM(buf);
+    return retCode;
+}
+
 int main(int argc, char *argv[])
 {
     errno = 0;
@@ -497,6 +571,12 @@ int main(int argc, char *argv[])
 
     switch (operation)
     {
+    case CLIENT_REQUEST_GET_STDOUT:
+        rq_stdout_stderr(pipe_req, pipe_rep,taskid,operation);
+        break;
+    case CLIENT_REQUEST_GET_STDERR:
+        rq_stdout_stderr(pipe_req, pipe_rep,taskid,operation);
+        break;
     case CLIENT_REQUEST_CREATE_TASK:
         create_task(pipe_req, pipe_rep, minutes_str, hours_str, daysofweek_str, argc - optind, &argv[optind]);
         break;
