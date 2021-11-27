@@ -29,6 +29,5 @@ int remove_task(int request, int reply, uint64_t taskid, int isBigE);
 int rq_stdout_stderr(int request, int reply, uint64_t taskid,uint16_t operation, int isBigE);
 int terminate(int request, int reply, int isBigE);
 int times_exitcodes(int request, int reply, uint64_t taskid, int isBigE);
->>>>>>> include/cassini.h
 
 #endif // CASSINI

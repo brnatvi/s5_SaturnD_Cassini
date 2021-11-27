@@ -628,8 +628,10 @@ int rq_stdout_stderr(int request, int reply, uint64_t taskid,uint16_t operation,
                         if (!isBigE)
                             codeErr = htobe16(codeErr);
                         printf("%d",codeErr);
+                        exit(EXIT_FAILURE);
                     }else{
                         perror("read from pipe-reply failure");
+                        retCode = EXIT_FAILURE;
                     }
 
                     break;
