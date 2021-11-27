@@ -409,25 +409,22 @@ int rq_stdout_stderr(int request, int reply, uint64_t taskid,uint16_t operation)
         }
     }
     if (EXIT_SUCCESS == retCode) {
-        const int lenAnswer = sizeof(uint16_t)+sizeof(uint32_t);
+        const int lenAnswer = sizeof(uint16_t);
         uint8_t bufReply[lenAnswer];
         while (1) {
+
             ssize_t resRead = read(reply, bufReply, lenAnswer);
             if (0 == resRead) {
                 continue;
             } else if (resRead == lenAnswer ) {
                 uint16_t ResCode = *(uint16_t *) bufReply;
-                uint32_t length = *(uint32_t * )(bufReply + sizeof(uint16_t));
+                if (!isBigE)ResCode = htobe16(ResCode);
 
-                if (!isBigE) {
-                    ResCode = htobe16(ResCode);
-                    length = htobe32(length);
-                }
                 if (ResCode == SERVER_REPLY_ERROR) {
-                    uint8_t buffReply[sizeof(uint16_t)*2];
-                    ssize_t resRead = read(reply, buffReply, sizeof(uint16_t)*2);
-                    if(resRead!=sizeof(uint16_t)*2) {
-                        uint16_t codeErr = *(uint16_t *) buffReply + 2;
+                    uint8_t buffReply[sizeof(uint16_t)];
+                    ssize_t readErr = read(reply, buffReply, sizeof(uint16_t));
+                    if(readErr==sizeof(uint16_t)) {
+                        uint16_t codeErr = *(uint16_t *) buffReply;
                         if (!isBigE)
                             codeErr = htobe16(codeErr);
                         printf("%d",codeErr);
@@ -437,9 +434,18 @@ int rq_stdout_stderr(int request, int reply, uint64_t taskid,uint16_t operation)
 
                     break;
                 }else {
-                    uint8_t buffer[length];
-                    ssize_t readString = read(reply, buffer, length);
-                    printf("%s", buffer);
+                    uint8_t buffReply[sizeof(uint32_t)];
+                    ssize_t r = read(reply, buffReply, sizeof(uint32_t));
+                    if(r!=sizeof(uint32_t))perror("read from pipe-reply failure");
+                    else {
+                        uint32_t length = *(uint32_t *) buffReply;
+                        if (!isBigE)length = htobe32(length);
+                        uint8_t buffer[length+1];
+                        ssize_t readString = read(reply, buffer, length);
+                        buffer[length]='\0';
+                        if (readString != length)perror("read from pipe-reply failure");
+                        else printf("%s", buffer);
+                    }
                     break; // correct response
                 }
             } else { //error
