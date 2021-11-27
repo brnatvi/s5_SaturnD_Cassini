@@ -14,4 +14,4 @@ Les fonctions auxiliaires :
 ## TODO
 -[ ] attribution de nouvelles issues
 
-Prochaine réunion : samedi 13 novembre après-midi
+Prochaine réunion : samedi 20 novembre après-midi
