@@ -581,6 +581,86 @@ int remove_task(int request, int reply, uint64_t taskid, int isBigE) {
 }
 
 
+int rq_stdout_stderr(int request, int reply, uint64_t taskid,uint16_t operation, int isBigE) {
+    int retCode = EXIT_SUCCESS;
+    size_t count = sizeof(uint16_t)+sizeof(uint64_t);
+    void *buf = malloc(count);
+    char *bufIter = (char *)buf;
+    if (!buf) {
+        perror("can't allocate memory");
+        retCode = EXIT_FAILURE;
+    }
+    if (EXIT_SUCCESS == retCode) {
+        uint16_t opCode = operation;
+        uint64_t id = taskid;
+        if (!isBigE) {
+            opCode = htobe16(opCode);
+            id = htobe64(taskid);
+        }
+
+        memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
+        bufIter += CLIENT_REQUEST_HEADER_SIZE;
+        memcpy(bufIter, &id, sizeof(uint64_t));
+        bufIter += sizeof(uint64_t);
+        ssize_t resRequest = write(request, buf, count);
+        if (resRequest < (ssize_t) count) {
+            perror("write to pipe failure");
+            retCode = EXIT_FAILURE;
+        }
+    }
+    if (EXIT_SUCCESS == retCode) {
+        const int lenAnswer = sizeof(uint16_t);
+        uint8_t bufReply[lenAnswer];
+        while (1) {
+
+            ssize_t resRead = read(reply, bufReply, lenAnswer);
+            if (0 == resRead) {
+                continue;
+            } else if (resRead == lenAnswer ) {
+                uint16_t ResCode = *(uint16_t *) bufReply;
+                if (!isBigE)ResCode = htobe16(ResCode);
+
+                if (ResCode == SERVER_REPLY_ERROR) {
+                    uint8_t buffReply[sizeof(uint16_t)];
+                    ssize_t readErr = read(reply, buffReply, sizeof(uint16_t));
+                    if(readErr==sizeof(uint16_t)) {
+                        uint16_t codeErr = *(uint16_t *) buffReply;
+                        if (!isBigE)
+                            codeErr = htobe16(codeErr);
+                        printf("%d",codeErr);
+                        exit(EXIT_FAILURE);
+                    }else{
+                        perror("read from pipe-reply failure");
+                        retCode = EXIT_FAILURE;
+                    }
+
+                    break;
+                }else {
+                    uint8_t buffReply[sizeof(uint32_t)];
+                    ssize_t r = read(reply, buffReply, sizeof(uint32_t));
+                    if(r!=sizeof(uint32_t))perror("read from pipe-reply failure");
+                    else {
+                        uint32_t length = *(uint32_t *) buffReply;
+                        if (!isBigE)length = htobe32(length);
+                        uint8_t buffer[length+1];
+                        ssize_t readString = read(reply, buffer, length);
+                        buffer[length]='\0';
+                        if (readString != length)perror("read from pipe-reply failure");
+                        else printf("%s", buffer);
+                    }
+                    break; // correct response
+                }
+            } else { //error
+                perror("read from pipe-reply failure");
+                retCode = EXIT_FAILURE;
+                break;
+            }
+        }
+    }
+    FREE_MEM(buf);
+    return retCode;
+}
+
 // function terminate
 int terminate(int request, int reply, int isBigE)
 {
@@ -761,6 +841,12 @@ int main(int argc, char *argv[]) {
             break;
         case CLIENT_REQUEST_REMOVE_TASK:
             remove_task(pipe_req, pipe_rep, taskid, isBigE);
+            break;
+        case CLIENT_REQUEST_GET_STDOUT:
+            rq_stdout_stderr(pipe_req, pipe_rep,taskid,operation, isBigE);
+            break;
+        case CLIENT_REQUEST_GET_STDERR:
+            rq_stdout_stderr(pipe_req, pipe_rep,taskid,operation, isBigE);
             break;
         case CLIENT_REQUEST_TERMINATE:
             terminate(pipe_req, pipe_rep, isBigE);
