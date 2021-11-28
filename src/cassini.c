@@ -133,13 +133,13 @@ int main(int argc, char *argv[]) {
 
     switch (operation) {
         case CLIENT_REQUEST_CREATE_TASK:
-            create_task(pipe_req, pipe_rep, minutes_str, hours_str, daysofweek_str, argc - optind, &argv[optind], isBigE);
+            create_task(pipe_req, pipe_rep, minutes_str, hours_str, daysofweek_str, argc - optind, &argv[optind]);
             break;
         case CLIENT_REQUEST_LIST_TASKS:
             list_task(pipe_req, pipe_rep, isBigE);
             break;
         case CLIENT_REQUEST_REMOVE_TASK:
-            remove_task(pipe_req, pipe_rep, taskid, isBigE);
+            remove_task(pipe_req, pipe_rep, taskid);
             break;
         case CLIENT_REQUEST_GET_STDOUT:
             rq_stdout_stderr(pipe_req, pipe_rep, taskid, operation, isBigE);

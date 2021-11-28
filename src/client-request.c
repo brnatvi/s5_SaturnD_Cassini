@@ -319,14 +319,12 @@ int list_task(int request, int reply, int isBigE) {
 }
 
 // function create task
-int create_task(int request, int reply, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[], int isBigE) {
+int create_task(int request, int reply, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[]) {
     int retCode = EXIT_SUCCESS;
     struct timing dest;
 
     // find the length of request: request's pattern : OPCODE = 'CR' < uint16 >, TIMING<timing>, COMMANDLINE<commandline>
-    size_t count = 2 * sizeof(char) +
-                   CLIENT_TIMING_SIZE  //sizeof(dest) - we can't use sizeof because of different alignment depending on platform and compiler
-                   + sizeof(uint32_t);
+    size_t count = 2 * sizeof(char) + CLIENT_TIMING_SIZE + sizeof(uint32_t);
 
     if (argc < 1) {
         perror("no agruments provided");
@@ -355,18 +353,12 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
     // write request to buffer
     if (EXIT_SUCCESS == retCode) {
         uint16_t opCode = CLIENT_REQUEST_CREATE_TASK;
-        if (!isBigE) {
-            opCode = htobe16(opCode);
-        }
-
+        opCode = htobe16(opCode);
         memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
         bufIter += CLIENT_REQUEST_HEADER_SIZE;
 
-        if (!isBigE) {
-            dest.minutes = htobe64(dest.minutes);
-            dest.hours = htobe32(dest.hours);
-        }
-
+        dest.minutes = htobe64(dest.minutes);
+        dest.hours = htobe32(dest.hours);
         memcpy(bufIter, &dest.minutes, sizeof(dest.minutes));
         bufIter += sizeof(dest.minutes);
         memcpy(bufIter, &dest.hours, sizeof(dest.hours));
@@ -375,19 +367,14 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
         bufIter += sizeof(dest.daysofweek);
 
         uint32_t argsC = (uint32_t)argc;
-        if (!isBigE) {
-            argsC = htobe32(argsC);
-        }
+        argsC = htobe32(argsC);        
         memcpy(bufIter, &argsC, sizeof(argsC));
         bufIter += sizeof(argsC);
 
         for (int i = 0; i < argc; i++) {
             uint32_t len = strlen(argv[i]);
             uint32_t tmp = len;
-
-            if (!isBigE) {
-                tmp = htobe32(len);
-            }
+            tmp = htobe32(len);            
 
             memcpy(bufIter, &tmp, sizeof(tmp));
             bufIter += sizeof(len);
@@ -417,11 +404,8 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
             {
                 uint16_t ResCode = *(uint16_t *)bufReply;
                 uint64_t uTaskId = *(uint64_t *)(bufReply + 2);
-
-                if (!isBigE) {
-                    ResCode = htobe16(ResCode);
-                    uTaskId = htobe64(uTaskId);
-                }
+                ResCode = be16toh(ResCode);
+                uTaskId = be64toh(uTaskId);                
 
                 // if first 2 bytes = 'OK' it's approved answer
                 if (ResCode != SERVER_REPLY_OK) {
@@ -429,9 +413,7 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
                     retCode = EXIT_FAILURE;
                     break;
                 }
-
                 printf("%lu", uTaskId);
-
                 break;  // correct response
             } else      // error
             {
@@ -443,12 +425,11 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
     }
     // free memory
     FREE_MEM(buf);
-
     return retCode;
 }
 
 // function remove task
-int remove_task(int request, int reply, uint64_t taskid, int isBigE) {
+int remove_task(int request, int reply, uint64_t taskid) {
     int retCode = EXIT_SUCCESS;
 
     // find the length of request: request's pattern : OPCODE='RM' <uint16>, TASKID <uint64>
@@ -464,18 +445,13 @@ int remove_task(int request, int reply, uint64_t taskid, int isBigE) {
 
     // write request to buffer
     if (EXIT_SUCCESS == retCode) {
-        uint16_t opCode = CLIENT_REQUEST_REMOVE_TASK;
-        if (!isBigE) {
-            opCode = htobe16(opCode);
-        }
-
+        uint16_t opCode = CLIENT_REQUEST_REMOVE_TASK;        
+        opCode = htobe16(opCode);
         memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
         bufIter += CLIENT_REQUEST_HEADER_SIZE;
 
         uint64_t taskId = (uint64_t)taskid;
-        if (!isBigE) {
-            taskId = htobe64(taskId);
-        }
+        taskId = htobe64(taskId);
         memcpy(bufIter, &taskId, sizeof(taskId));
         bufIter += sizeof(taskId);
 
@@ -489,8 +465,7 @@ int remove_task(int request, int reply, uint64_t taskid, int isBigE) {
 
     // read the answer of saturnd from reply pipe
     // response's pattern : REPTYPE='OK' <uint16>
-    //                   or REPTYPE='ER' <uint16>, ERRCODE <uint16>
-    //                                             ERRCODE = 0x4e46 ('NF')
+    //                   or REPTYPE='ER' <uint16>, ERRCODE <uint16> where ERRCODE = 0x4e46 ('NF')
     if (EXIT_SUCCESS == retCode) {
         const int lenAnswer = 2 * sizeof(uint16_t);
         uint32_t bufReply[lenAnswer];
@@ -503,11 +478,8 @@ int remove_task(int request, int reply, uint64_t taskid, int isBigE) {
             {
                 uint16_t ResCode = *(uint16_t *)bufReply;
                 uint16_t uErrCode = *(uint16_t *)(bufReply + 2);
-
-                if (!isBigE) {
-                    ResCode = htobe16(ResCode);
-                    uErrCode = htobe16(uErrCode);
-                }
+                ResCode = be16toh(ResCode);
+                uErrCode = be16toh(uErrCode);
 
                 // if first 2 bytes = 'OK' it's approved answer
                 if (ResCode != SERVER_REPLY_OK) {
@@ -522,9 +494,6 @@ int remove_task(int request, int reply, uint64_t taskid, int isBigE) {
                         break;
                     }
                 }
-
-                // printf("%u", ResCode);
-
                 break;  // correct response
             } else      // error
             {
@@ -536,7 +505,6 @@ int remove_task(int request, int reply, uint64_t taskid, int isBigE) {
     }
     // free memory
     FREE_MEM(buf);
-
     return retCode;
 }
 
