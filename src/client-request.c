@@ -324,7 +324,7 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
     struct timing dest;
 
     // find the length of request: request's pattern : OPCODE = 'CR' < uint16 >, TIMING<timing>, COMMANDLINE<commandline>
-    size_t count = 2 * sizeof(char) + CLIENT_TIMING_SIZE + sizeof(uint32_t);
+    size_t count = CLIENT_REQUEST_HEADER_SIZE + CLIENT_TIMING_SIZE + sizeof(uint32_t);
 
     if (argc < 1) {
         perror("no agruments provided");
@@ -433,7 +433,7 @@ int remove_task(int request, int reply, uint64_t taskid) {
     int retCode = EXIT_SUCCESS;
 
     // find the length of request: request's pattern : OPCODE='RM' <uint16>, TASKID <uint64>
-    size_t count = 2 * sizeof(char) + sizeof(uint64_t);
+    size_t count = CLIENT_REQUEST_HEADER_SIZE + sizeof(uint64_t);
 
     // create buffer for request
     void *buf = malloc(count);
