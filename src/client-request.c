@@ -508,7 +508,7 @@ int remove_task(int request, int reply, uint64_t taskid) {
     return retCode;
 }
 
-int rq_stdout_stderr(int request, int reply, uint64_t taskid, uint16_t operation, int isBigE) {
+int rq_stdout_stderr(int request, int reply, uint64_t taskid, uint16_t operation) {
     int retCode = EXIT_SUCCESS;
     size_t count = sizeof(uint16_t) + sizeof(uint64_t);
     void *buf = malloc(count);
@@ -520,10 +520,8 @@ int rq_stdout_stderr(int request, int reply, uint64_t taskid, uint16_t operation
     if (EXIT_SUCCESS == retCode) {
         uint16_t opCode = operation;
         uint64_t id = taskid;
-        if (!isBigE) {
-            opCode = htobe16(opCode);
-            id = htobe64(taskid);
-        }
+        opCode = be16toh(opCode);
+        id = be64toh(taskid);
 
         memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
         bufIter += CLIENT_REQUEST_HEADER_SIZE;
@@ -544,16 +542,14 @@ int rq_stdout_stderr(int request, int reply, uint64_t taskid, uint16_t operation
                 continue;
             } else if (resRead == lenAnswer) {
                 uint16_t ResCode = *(uint16_t *)bufReply;
-                if (!isBigE)
-                    ResCode = htobe16(ResCode);
+                ResCode = be16toh(ResCode);
 
                 if (ResCode == SERVER_REPLY_ERROR) {
                     uint8_t buffReply[sizeof(uint16_t)];
                     ssize_t readErr = read(reply, buffReply, sizeof(uint16_t));
                     if (readErr == sizeof(uint16_t)) {
                         uint16_t codeErr = *(uint16_t *)buffReply;
-                        if (!isBigE)
-                            codeErr = htobe16(codeErr);
+                        codeErr = be16toh(codeErr);
                         printf("%d", codeErr);
                         exit(EXIT_FAILURE);
                     } else {
@@ -569,8 +565,7 @@ int rq_stdout_stderr(int request, int reply, uint64_t taskid, uint16_t operation
                         perror("read from pipe-reply failure");
                     else {
                         uint32_t length = *(uint32_t *)buffReply;
-                        if (!isBigE)
-                            length = htobe32(length);
+                        length = be32toh(length);
                         uint8_t buffer[length + 1];
                         ssize_t readString = read(reply, buffer, length);
                         buffer[length] = '\0';
@@ -593,7 +588,7 @@ int rq_stdout_stderr(int request, int reply, uint64_t taskid, uint16_t operation
 }
 
 // function terminate
-int terminate(int request, int reply, int isBigE) {
+int terminate(int request, int reply) {
     int retCode = EXIT_SUCCESS;
     size_t count = sizeof(uint16_t);
     void *buf = malloc(count);
@@ -604,9 +599,7 @@ int terminate(int request, int reply, int isBigE) {
     }
     if (EXIT_SUCCESS == retCode) {
         uint16_t opCode = CLIENT_REQUEST_TERMINATE;
-        if (!isBigE) {
-            opCode = htobe16(opCode);
-        }
+        opCode = be16toh(opCode);
 
         memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
         bufIter += CLIENT_REQUEST_HEADER_SIZE;
@@ -627,10 +620,7 @@ int terminate(int request, int reply, int isBigE) {
             } else if (rezRead == lenAnswer)  // check if correct response
             {
                 uint16_t ResCode = *(uint16_t *)bufReply;
-
-                if (!isBigE) {
-                    ResCode = htobe16(ResCode);
-                }
+                ResCode = be16toh(ResCode);
 
                 // if first 2 bytes = 'OK' it's approved answer
                 if (ResCode != SERVER_REPLY_OK) {
