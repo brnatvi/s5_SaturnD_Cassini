@@ -128,9 +128,6 @@ int main(int argc, char *argv[]) {
         goto error;
     }
 
-    // check if need to convert to big endian
-    int isBigE = isBigEndian();
-
     switch (operation) {
         case CLIENT_REQUEST_CREATE_TASK:
             create_task(pipe_req, pipe_rep, minutes_str, hours_str, daysofweek_str, argc - optind, &argv[optind]);
@@ -142,13 +139,13 @@ int main(int argc, char *argv[]) {
             remove_task(pipe_req, pipe_rep, taskid);
             break;
         case CLIENT_REQUEST_GET_STDOUT:
-            rq_stdout_stderr(pipe_req, pipe_rep, taskid, operation, isBigE);
+            rq_stdout_stderr(pipe_req, pipe_rep, taskid, operation);
             break;
         case CLIENT_REQUEST_GET_STDERR:
-            rq_stdout_stderr(pipe_req, pipe_rep, taskid, operation, isBigE);
+            rq_stdout_stderr(pipe_req, pipe_rep, taskid, operation);
             break;
         case CLIENT_REQUEST_TERMINATE:
-            terminate(pipe_req, pipe_rep, isBigE);
+            terminate(pipe_req, pipe_rep);
             break;
         case CLIENT_REQUEST_GET_TIMES_AND_EXITCODES:
             times_exitcodes(pipe_req, pipe_rep, taskid);
