@@ -128,9 +128,6 @@ int main(int argc, char *argv[]) {
         goto error;
     }
 
-    // check if need to convert to big endian
-    int isBigE = isBigEndian();
-
     switch (operation) {
         case CLIENT_REQUEST_CREATE_TASK:
             create_task(pipe_req, pipe_rep, minutes_str, hours_str, daysofweek_str, argc - optind, &argv[optind]);

@@ -21,7 +21,6 @@
 #define FREE_MEM(Mem) if (Mem) {free(Mem); Mem = NULL;}
 
 
-int isBigEndian();
 char * create_path(char *pipes_directory, int isRequets);
 int create_task(int request, int reply, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[]);
 int list_task(int request, int reply, int isBigE);

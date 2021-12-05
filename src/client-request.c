@@ -1,12 +1,5 @@
 #include "cassini.h"
 
-// function to check if big endian on
-int isBigEndian() {
-    uint16_t testVal = 1;
-    uint8_t *pTestVal = (uint8_t *)&testVal;
-    return (pTestVal[0] != 1) ? 1 : 0;
-}
-
 // function to create paths for request-pipe and reply-pipe
 char *create_path(char *pipes_directory, int isRequets) {
     char *pResult = NULL;
