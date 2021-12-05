@@ -31,7 +31,7 @@ char *create_path(char *pipes_directory, int isRequets) {
 }
 
 // function times exitcodes
-int times_exitcodes(int request, int reply, uint64_t taskid, int isBigE) {
+int times_exitcodes(int request, int reply, uint64_t taskid) {
     int retCode = EXIT_SUCCESS;
 
     // create buffer for request
@@ -46,10 +46,9 @@ int times_exitcodes(int request, int reply, uint64_t taskid, int isBigE) {
     if (EXIT_SUCCESS == retCode) {
         uint16_t opCode = CLIENT_REQUEST_GET_TIMES_AND_EXITCODES;
         uint64_t tId = taskid;
-        if (!isBigE) {
-            opCode = htobe16(opCode);
-            tId = htobe64(tId);
-        }
+
+        opCode = htobe16(opCode);
+        tId = htobe64(tId);
 
         memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
         bufIter += CLIENT_REQUEST_HEADER_SIZE;
@@ -73,9 +72,8 @@ int times_exitcodes(int request, int reply, uint64_t taskid, int isBigE) {
                 continue;                     // no answer, continue to listening
             else if (rezRead == lenAnswer) {  // check if correct response
                 uint16_t ResCode = *(uint16_t *)bufReply;
-                if (!isBigE) {
-                    ResCode = htobe16(ResCode);
-                }
+
+                ResCode = be16toh(ResCode);
 
                 if (ResCode == SERVER_REPLY_OK) {
                     const int lenAnswerNB = sizeof(uint32_t);
@@ -86,9 +84,8 @@ int times_exitcodes(int request, int reply, uint64_t taskid, int isBigE) {
                             continue;                         // no answer, continue to listening
                         else if (rezReadNB == lenAnswerNB) {  // check if correct response
                             uint32_t nbruns = *(uint32_t *)bufReplyNB;
-                            if (!isBigE) {
-                                nbruns = htobe32(nbruns);
-                            }
+
+                            nbruns = be32toh(nbruns);
 
                             // browse multiple tasks
                             const int lenAnswerOk = sizeof(uint64_t) + sizeof(uint16_t);
@@ -104,10 +101,8 @@ int times_exitcodes(int request, int reply, uint64_t taskid, int isBigE) {
                                         uint64_t timepass = *(uint64_t *)bufReplyOk;
                                         uint16_t exitcode = *(uint16_t *)(bufReplyOk + 8);
 
-                                        if (!isBigE) {
-                                            timepass = htobe64(timepass);
-                                            exitcode = htobe16(exitcode);
-                                        }
+                                        timepass = be64toh(timepass);
+                                        exitcode = be16toh(exitcode);
 
                                         // convert seconds to a date as a string
                                         struct tm *info;
@@ -146,7 +141,7 @@ int times_exitcodes(int request, int reply, uint64_t taskid, int isBigE) {
 }
 
 // function list task
-int list_task(int request, int reply, int isBigE) {
+int list_task(int request, int reply) {
     int retCode = EXIT_SUCCESS;
 
     // create buffer for request
@@ -160,9 +155,8 @@ int list_task(int request, int reply, int isBigE) {
     // write request to buffer
     if (EXIT_SUCCESS == retCode) {
         uint16_t opCode = CLIENT_REQUEST_LIST_TASKS;
-        if (!isBigE) {
-            opCode = htobe16(opCode);
-        }
+
+        opCode = htobe16(opCode);
 
         memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
         bufIter += CLIENT_REQUEST_HEADER_SIZE;
@@ -186,10 +180,9 @@ int list_task(int request, int reply, int isBigE) {
             else if (lenResponse == readBuf) {
                 uint16_t responseOK = *(uint16_t *)bufResponse;
                 uint32_t numberProcess = *(uint32_t *)(bufResponse + 2);
-                if (!isBigE) {
-                    responseOK = htobe16(responseOK);
-                    numberProcess = htobe32(numberProcess);
-                }
+
+                responseOK = be16toh(responseOK);
+                numberProcess = be32toh(numberProcess);
 
                 uint8_t tabTasks[sizeof(uint64_t) + CLIENT_TIMING_SIZE + sizeof(uint32_t)];
                 while (numberProcess != 0 != 0) {
@@ -205,12 +198,10 @@ int list_task(int request, int reply, int isBigE) {
                             uint8_t timingDay = *(uint8_t *)(tabTasks + 8 + 8 + 4);
                             uint32_t cmdArgc = *(uint32_t *)(tabTasks + 8 + 8 + 4 + 1);
 
-                            if (!isBigE) {
-                                taskid = htobe64(taskid);
-                                timingMin = htobe64(timingMin);
-                                timingHou = htobe32(timingHou);
-                                cmdArgc = htobe32(cmdArgc);
-                            }
+                            taskid = be64toh(taskid);
+                            timingMin = be64toh(timingMin);
+                            timingHou = be32toh(timingHou);
+                            cmdArgc = be32toh(cmdArgc);
 
                             // convert timing to string
                             struct timing t = {.minutes = timingMin,
@@ -238,9 +229,8 @@ int list_task(int request, int reply, int isBigE) {
 
                                 // get the size of one of the arguments
                                 uint32_t sizeofword = *(uint32_t *)(bufsizeword);
-                                if (!isBigE) {
-                                    sizeofword = htobe32(sizeofword);
-                                }
+
+                                sizeofword = be32toh(sizeofword);
 
                                 // Get an argument
                                 uint8_t bufword[sizeofword];

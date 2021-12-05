@@ -133,7 +133,7 @@ int main(int argc, char *argv[]) {
             create_task(pipe_req, pipe_rep, minutes_str, hours_str, daysofweek_str, argc - optind, &argv[optind]);
             break;
         case CLIENT_REQUEST_LIST_TASKS:
-            list_task(pipe_req, pipe_rep, isBigE);
+            list_task(pipe_req, pipe_rep);
             break;
         case CLIENT_REQUEST_REMOVE_TASK:
             remove_task(pipe_req, pipe_rep, taskid);
@@ -148,7 +148,7 @@ int main(int argc, char *argv[]) {
             terminate(pipe_req, pipe_rep);
             break;
         case CLIENT_REQUEST_GET_TIMES_AND_EXITCODES:
-            times_exitcodes(pipe_req, pipe_rep, taskid, isBigE);
+            times_exitcodes(pipe_req, pipe_rep, taskid);
             break;
     }
 
