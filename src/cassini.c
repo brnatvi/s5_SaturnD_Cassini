@@ -1,6 +1,9 @@
 #include "cassini.h"
 
-const char usage_info[] =
+
+
+int main(int argc, char *argv[]) {
+    const char usage_info[] =
     "\
    usage: cassini [OPTIONS] -l -> list all tasks\n\
       or: cassini [OPTIONS]    -> same\n\
@@ -20,7 +23,6 @@ const char usage_info[] =
      -p PIPES_DIR -> look for the pipes in PIPES_DIR (default: /tmp/<USERNAME>/saturnd/pipes)\n\
 ";
 
-int main(int argc, char *argv[]) {
     errno = 0;
     int ret = EXIT_SUCCESS;
 
