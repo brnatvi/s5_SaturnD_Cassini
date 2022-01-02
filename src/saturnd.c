@@ -194,8 +194,8 @@ int processCreateCmd(struct stContext *context)
     uint32_t       argc    = 0;
     ssize_t        rezRead = 0;
     time_t         curTime = time(NULL);
-    const size_t   prelySz = sizeof(uint16_t) + sizeof(uint64_t);
-    uint8_t        replyBuf[prelySz];
+    const size_t   replySz = sizeof(uint16_t) + sizeof(uint64_t);
+    uint8_t        replyBuf[replySz];
     struct stTask *newTask = (struct stTask*) malloc(sizeof(struct stTask)); //create structure for new task
 
     if (!newTask){
@@ -210,7 +210,7 @@ int processCreateCmd(struct stContext *context)
         retCode = EXIT_FAILURE;
         goto lExit;
     }
-    memset(newTask->runs, 0, sizeof(struct listElements_t *));
+    memset(newTask->runs, 0, sizeof(struct listElements_t));
 
     // read timing
     rezRead = read(context->pipeRequest, &min, sizeof(min));
@@ -324,7 +324,7 @@ int processCreateCmd(struct stContext *context)
 
     *(uint16_t*)replyBuf = htobe16(SERVER_REPLY_OK);
     *(uint64_t*)(replyBuf + sizeof(uint16_t)) = htobe64(newTask->taskId);
-    retCode = writeReply(context, replyBuf, prelySz);
+    retCode = writeReply(context, replyBuf, replySz);
 
 lExit:
     if (EXIT_SUCCESS == retCode){
@@ -337,14 +337,73 @@ lExit:
     return retCode;
 }
 
-int processRemoveCmd(struct stContext *context)
-{
-    return EXIT_SUCCESS;
+int processRemoveCmd(struct stContext *context){
+    int               ret     = EXIT_SUCCESS;
+    uint64_t          taskId  = 0x0;
+    ssize_t           rezRead = 0;
+    struct element_t *taskEl  = context->tasks->first;
+    struct stTask    *task    = NULL;
+    const size_t      replySz = 2 * sizeof(uint16_t);
+    uint8_t           replyBuf[replySz];
+    char              txtBuf[256];
+    char              txtPath[4096];
+
+    // read task ID
+    rezRead = read(context->pipeRequest, &taskId, sizeof(taskId));
+    if (rezRead < sizeof(taskId)){
+        perror("read task ID");
+        ret = EXIT_FAILURE;
+        goto lExit;
+    }
+    taskId = be64toh(taskId);
+
+    while ((taskEl) && (EXIT_SUCCESS == ret))
+    {
+        task = (struct stTask *)(taskEl->data);
+        if (task->taskId == taskId)
+        {
+            break;
+        }
+        taskEl = taskEl->next;
+    }
+
+    if (taskEl)
+    {
+        sprintf(txtBuf, "/tree/%lu/stdout", task->taskId);
+        GET_DEFAULT_PATH(txtPath, txtBuf);
+        remove(txtPath);
+
+        sprintf(txtBuf, "/tree/%lu/stderr", task->taskId);
+        GET_DEFAULT_PATH(txtPath, txtBuf);
+        remove(txtPath);
+
+        sprintf(txtBuf, "/tree/%lu", task->taskId);
+        GET_DEFAULT_PATH(txtPath, txtBuf);
+        rmdir(txtPath);
+
+        freeTask(task);
+        removeEl(context->tasks, taskEl);
+
+        *(uint16_t*)replyBuf = htobe16(SERVER_REPLY_OK);
+        ret = writeReply(context, replyBuf, sizeof(uint16_t));
+
+    }
+    else
+    {
+        *(uint16_t*)replyBuf = htobe16(SERVER_REPLY_ERROR);
+        *(uint16_t*)(replyBuf + sizeof(uint16_t)) = htobe16(SERVER_REPLY_ERROR_NOT_FOUND);
+        ret = writeReply(context, replyBuf, 2 * sizeof(uint16_t));
+    }
+
+lExit:
+    return ret;
 }
 
-int processTimesExitCodesCmd(struct stContext *context)
-{
-    return EXIT_SUCCESS;
+int processTimesExitCodesCmd(struct stContext *context){
+    int ret = EXIT_SUCCESS;
+
+
+    return ret;
 }
 
 int processTerminate(struct stContext *context)
@@ -607,17 +666,17 @@ int execTask(struct stContext *context, struct stTask * task)
     struct stString *fileErr = NULL;
     char txtBuf[1024];
 
-    char ** argv = (char **)malloc(sizeof(char *)*(task->argC));
+    char ** argv = (char **)malloc(sizeof(char *)*(task->argC+1));
     if (!argv) {
         perror("read arg text");
         ret = EXIT_FAILURE;
         goto lExit;
     }
     
-    for (size_t i = 1; i < task->argC; i++){
+    for (size_t i = 0; i < task->argC; i++){
         argv[i] = task->argV[i]->text;
     }
-    argv[task->argC - 1] = NULL;
+    argv[task->argC] = NULL;
 
     sprintf(txtBuf, "/tree/%lu/stdout", task->taskId);
     fileOut = createFilePath(txtBuf);
@@ -627,7 +686,7 @@ int execTask(struct stContext *context, struct stTask * task)
     task->stdOut = open(fileOut->text, 
                         O_CREAT | O_RDWR | O_TRUNC,
                         S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR | S_IWGRP | S_IWOTH);
-    task->stdErr = open(fileOut->text, 
+    task->stdErr = open(fileErr->text, 
                         O_CREAT | O_RDWR | O_TRUNC, 
                         S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR | S_IWGRP | S_IWOTH);
 
@@ -648,9 +707,16 @@ int execTask(struct stContext *context, struct stTask * task)
     } 
     else if (0 == task->lastPid) 
     {
+        CLOSE_FILE(context->pipeReply);
+        CLOSE_FILE(context->pipeRequest);
+
         dup2(task->stdOut, STDOUT_FILENO);
         dup2(task->stdErr, STDERR_FILENO);
+
+        //printf("%s %s\n", argv[0], argv[1]);
+
         execvp(task->argV[0]->text, argv);
+        exit(0);
     } 
 
 lExit:
