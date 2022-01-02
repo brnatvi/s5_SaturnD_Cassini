@@ -129,7 +129,7 @@ int main(int argc, char *argv[]) {
 
     switch (operation) {
         case CLIENT_REQUEST_CREATE_TASK:
-            create_task(pipe_dir_req, pipe_dir_rep, minutes_str, hours_str, daysofweek_str, argc - optind, &argv[optind]);
+            create_task(pipe_dir_req, pipe_dir_rep, minutes_str, hours_str, daysofweek_str, argc - optind - 1, &argv[optind + 1]);
             break;
         case CLIENT_REQUEST_LIST_TASKS:
             list_task(pipe_dir_req, pipe_dir_rep);
