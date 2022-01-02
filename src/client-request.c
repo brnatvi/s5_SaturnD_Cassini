@@ -323,6 +323,7 @@ int create_task(char* request, char* reply, char *minutes_str, char *hours_str, 
         perror("no agruments provided");
         return EXIT_FAILURE;
     }
+
     for (int i = 0; i < argc; i++) {
         count += sizeof(uint32_t) + strlen(argv[i]);
     }
@@ -378,8 +379,6 @@ int create_task(char* request, char* reply, char *minutes_str, char *hours_str, 
         // write from buffer to pipe
 
         int pipe_req = open(request, O_WRONLY);
-        printf("{%s} write: %d, count=%zu\n", request, pipe_req, (size_t)count);
-        perror("open ..");
         ssize_t resRequest = write(pipe_req, buf, count);
         if (resRequest < (ssize_t)count) {
             perror("write to pipe failure");
@@ -470,41 +469,29 @@ int remove_task(char* request, char* reply, uint64_t taskid) {
     // response's pattern : REPTYPE='OK' <uint16>
     //                   or REPTYPE='ER' <uint16>, ERRCODE <uint16> where ERRCODE = 0x4e46 ('NF')
     if (EXIT_SUCCESS == retCode) {
-        const int lenAnswer = 2 * sizeof(uint16_t);
-        uint32_t bufReply[lenAnswer];
         int pipe_rep = open(reply, O_RDONLY);
-        while (1) {
-            ssize_t rezRead = read(pipe_rep, bufReply, lenAnswer);
-            if (0 == rezRead)  // no answer, continue to listening
-            {
-                continue;
-            } else if (rezRead == lenAnswer)  // check if correct response
-            {
-                uint16_t ResCode = *(uint16_t *)bufReply;
-                uint16_t uErrCode = *(uint16_t *)(bufReply + 2);
-                ResCode = be16toh(ResCode);
-                uErrCode = be16toh(uErrCode);
-
-                // if first 2 bytes = 'OK' it's approved answer
-                if (ResCode != SERVER_REPLY_OK) {
-                    // or if first 2 bytes = 'ER'and ERRCODE ='NF' it's approved answer too
-                    if (ResCode != SERVER_REPLY_ERROR) {
+        uint16_t retType = SERVER_REPLY_OK;
+        ssize_t rezRead = read(pipe_rep, &retType, sizeof(retType));
+        if (rezRead == sizeof(retType)){
+            retType = be16toh(retType);    
+            if (retType != SERVER_REPLY_OK){
+                uint16_t retErr = SERVER_REPLY_ERROR_NOT_FOUND;
+                rezRead = read(pipe_rep, &retErr, sizeof(retErr));
+                if (rezRead == sizeof(retErr)){
+                    retErr = be16toh(retErr);    
+                    if (retErr != SERVER_REPLY_ERROR_NOT_FOUND){
                         perror("not approved response");
                         retCode = EXIT_FAILURE;
-                        break;
-                    } else if (uErrCode != SERVER_REPLY_ERROR_NOT_FOUND) {
-                        perror("not approved response");
-                        retCode = EXIT_FAILURE;
-                        break;
                     }
+                } else{
+                    perror("read reply error code");
+                    retCode = EXIT_FAILURE;
                 }
-                break;  // correct response
-            } else      // error
-            {
-                perror("read from pipe-reply failure");
-                retCode = EXIT_FAILURE;
-                break;
             }
+        }
+        else{
+            perror("read reply code");
+            retCode = EXIT_FAILURE;
         }
         CLOSE_FILE(pipe_rep);
     }
@@ -574,8 +561,8 @@ int rq_stdout_stderr(char* request, char* reply, uint64_t taskid, uint16_t opera
                     else {
                         uint32_t length = *(uint32_t *)buffReply;
                         length = be32toh(length);
-                        uint8_t buffer[length + 1];
-                        ssize_t readString = read(pipe_rep, buffer, length);
+                        uint8_t buffer[length + 1];  //malloc data, if bigger than 64k - allocate 64k 
+                        ssize_t readString = read(pipe_rep, buffer, length); //TODO: read by blocks and print by blocks
                         buffer[length] = '\0';
                         if (readString != length)
                             perror("read from pipe-reply failure");
