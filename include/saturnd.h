@@ -12,18 +12,17 @@
 #include <unistd.h>
 #include <time.h>
 #include <timing-text-io.h>
-#include <client-request.h>
 #include <cassini.h>
 #include <sys/stat.h>
 #include <timing.h>
+#include <poll.h>
+
 #include "listd.h"
 
 #include "client-request.h"
 #include "server-reply.h"
-#include "cassini.h"
-
-#define CLOSE_FILE(File) if (File > 0) {close(File); File = -1;}
-#define FREE_MEM(Mem) if (Mem) {free(Mem); Mem = NULL;}
+#include "pipes-path.h"
+#include "common-utils.h"
 
 struct stString
 {
@@ -33,16 +32,14 @@ struct stString
 
 struct stTask
 {
-    int               taskId;
-    unsigned char     minutes[60];
-    unsigned char     hours[24];
-    unsigned char     daysOfWeek[7];    
-    struct stString  *command;     
+    uint64_t          taskId;
+    unsigned char     minutes[60];    //array representing all minutes of 1h, for example [0, 0, 1, 1, 0, 0 ... ] => minutes 3,4 are active, all others are inactive
+    unsigned char     hours[24];      //array representing all hours of a day, for example [0, 1, 0, 1, 0, 0 ... ] => hours 2,4 are active, all others are inactive
+    unsigned char     daysOfWeek[7];  //array representing all days of a week, for example [1, 1, 0, 1, 0, 0, 0] => Sunday, Monday, Wednesday are active, all others are inactive
     size_t            argC;
     struct stString **argV;     
     int               stdOut;
     int               stdErr;
-    unsigned int      repeatable;
     struct tm         stCreated;
     struct tm         stExecuted;
 } ;
@@ -52,7 +49,8 @@ struct stContext
     struct listElements_t  *tasks;
     int                     pipeRequest;
     int                     pipeReply;
-    //TODO: other fields ?
+    uint64_t                lastTaskId; 
+    int                     exit;
 };
 
 
@@ -69,11 +67,15 @@ int maintainTasks(struct stContext *context);
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                               auxillary functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//if len = 0, all string until 0
-struct stString *createString(const char *str, size_t len);
+struct stString *createStringBuffer(size_t len);
+struct stString *createString(const char *str);
 
 int              freeString(struct stString *string);
+int              freeTask(struct stTask *task);
 
-int freeTask(struct stTask *task);
+struct stString *createFilePath(const char *postfix);
+
+int              isDirExists(const char *path);
+int              isFileExists(const char *path);
 
 #endif //SATURND_H
