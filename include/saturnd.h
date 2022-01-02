@@ -16,6 +16,7 @@
 #include <sys/stat.h>
 #include <timing.h>
 #include <poll.h>
+#include <sys/wait.h>
 
 #include "listd.h"
 
@@ -30,6 +31,13 @@ struct stString
     size_t len;
 };
 
+struct stRunStat
+{
+    struct tm  stTime;
+    int        code;
+};
+
+
 struct stTask
 {
     uint64_t          taskId;
@@ -42,11 +50,13 @@ struct stTask
     int               stdErr;
     struct tm         stCreated;
     struct tm         stExecuted;
+    pid_t             lastPid;
+    struct listElements_t *runs; //list of stRunStat
 };
 
 struct stContext
 {
-    struct listElements_t  *tasks;
+    struct listElements_t  *tasks; //list of stTask
     int                     pipeRequest;
     int                     pipeReply;
     uint64_t                lastTaskId; 
@@ -62,6 +72,7 @@ int processListCmd(struct stContext *context);
 int processCreateCmd(struct stContext *context);
 int processRemoveCmd(struct stContext *context);
 int processTimesExitCodesCmd(struct stContext *context);
+int processTerminate(struct stContext *context);
 int processStdOutCmd(struct stContext *context);
 int processStdErrCmd(struct stContext *context);
 int maintainTasks(struct stContext *context);
@@ -80,6 +91,9 @@ struct stString *createFilePath(const char *postfix);
 int              isDirExists(const char *path);
 int              isFileExists(const char *path);
 int              writeReply(struct stContext *context, const uint8_t *buff, size_t size);
+int              execTask(struct stContext *context, struct stTask * task);
+
+
 
 
 #endif //SATURND_H

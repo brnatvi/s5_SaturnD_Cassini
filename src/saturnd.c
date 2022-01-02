@@ -2,8 +2,9 @@
 
 int main(int argc, char *argv[]) 
 {
-    int              ret         = EXIT_SUCCESS;
+    int              ret = EXIT_SUCCESS;
     struct pollfd    fds[1];
+    int              cycle = 0;
 
     // 1) Create context stContext 
     struct stContext *context = (struct stContext*) malloc(sizeof(struct stContext));
@@ -32,10 +33,10 @@ int main(int argc, char *argv[])
     context->pipeReqName = createFilePath("pipes" PIPE_REQUEST_NAME);
     context->pipeRepName = createFilePath("pipes" PIPE_REPLY_NAME);
 
-    printf("{%s} {%s}\n", context->pipeReqName->text, context->pipeRepName->text);
+    printf("Req{%s} Rep{%s}\n", context->pipeReqName->text, context->pipeRepName->text);
 
     if (!isFileExists(context->pipeReqName->text)){
-        if (mkfifo(context->pipeReqName->text, S_IRUSR | S_IRGRP | S_IROTH) < 0){
+        if (mkfifo(context->pipeReqName->text, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) < 0){
             perror("make fifo is failure");
             ret = EXIT_FAILURE;
             goto lExit;
@@ -43,18 +44,24 @@ int main(int argc, char *argv[])
     }
 
     if (!isFileExists(context->pipeRepName->text)){
-        if (mkfifo(context->pipeRepName->text, S_IRUSR | S_IRGRP | S_IROTH) < 0){
+        if (mkfifo(context->pipeRepName->text, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) < 0){
             perror("make fifo is failure");
             ret = EXIT_FAILURE;
             goto lExit;
         }
     }
 
-    // obtain fd for reply-pipe and request-pipe, using NONBLOCK more for request FIFO to be capable to open it 
+    //obtain fd for reply-pipe and request-pipe, using NONBLOCK more for request FIFO to be capable to open it 
     //even if on other side there is no any process
-    context->pipeRequest = open(context->pipeReqName->text, O_RDONLY | O_NONBLOCK);        // open return -1 or fd
-    //context->pipeReply   = open(pipe_dir_rep, O_WRONLY | O_NONBLOCK);
 
+    //WARNING: pipe is opened with O_RDWR instead O_RDONLY for next reason:
+    //function **poll** returns with POLLHUP value in fds[0].revents constantly and immediately after first 
+    //communication session with Cassini -> cassini close the request pipe and this action force Saturn to
+    //return from **poll** all the time with POLLHUP return code.
+    //this behavious produce serions CPU load, and to optimize it next hack was used:
+    //https://stackoverflow.com/questions/22021253/poll-on-named-pipe-returns-with-pollhup-constantly-and-immediately
+    //N.B.: way how pipes are working under POSIX systems isn't looking user-friendly unfortunatelly.
+    context->pipeRequest = open(context->pipeReqName->text, O_RDWR | O_NONBLOCK);   
     if (context->pipeRequest < 0){
         perror("open fifo is failed");
         ret = EXIT_FAILURE;
@@ -93,28 +100,22 @@ int main(int argc, char *argv[])
         if (0 < pollRet){
             uint16_t code = 0x0;
             size_t szRead = read(context->pipeRequest, &code, sizeof(code));
-            if (szRead < sizeof(code))
-            {
-                perror("read code error");
-                ret = EXIT_FAILURE;
-                break;
-            }
+            if (szRead == sizeof(code)){
+                code = be16toh(code);
 
-            code = be16toh(code);
-
-            switch (code)
-            {
-                case CLIENT_REQUEST_LIST_TASKS              : ret = processListCmd(context); break;
-                case CLIENT_REQUEST_CREATE_TASK             : ret = processCreateCmd(context); break;
-                case CLIENT_REQUEST_REMOVE_TASK             : ret = processRemoveCmd(context); break;
-                case CLIENT_REQUEST_GET_TIMES_AND_EXITCODES : ret = processTimesExitCodesCmd(context); break;
-                case CLIENT_REQUEST_TERMINATE               : /*TODO: shall we create special function?*/ break;
-                case CLIENT_REQUEST_GET_STDOUT              : ret = processStdOutCmd(context); break;
-                case CLIENT_REQUEST_GET_STDERR              : ret = processStdErrCmd(context); break;
-                default :
-                    perror("unknown request!");
-                    ret = EXIT_FAILURE;
-                    break;
+                switch (code){
+                    case CLIENT_REQUEST_LIST_TASKS              : ret = processListCmd(context); break;
+                    case CLIENT_REQUEST_CREATE_TASK             : ret = processCreateCmd(context); break;
+                    case CLIENT_REQUEST_REMOVE_TASK             : ret = processRemoveCmd(context); break;
+                    case CLIENT_REQUEST_GET_TIMES_AND_EXITCODES : ret = processTimesExitCodesCmd(context); break;
+                    case CLIENT_REQUEST_TERMINATE               : ret = processTerminate(context); break;
+                    case CLIENT_REQUEST_GET_STDOUT              : ret = processStdOutCmd(context); break;
+                    case CLIENT_REQUEST_GET_STDERR              : ret = processStdErrCmd(context); break;
+                    default :
+                        perror("unknown request!");
+                        ret = EXIT_FAILURE;
+                        break;
+                }
             }
 
         } else if (0 > pollRet) { 
@@ -127,6 +128,15 @@ int main(int argc, char *argv[])
         {
             ret = maintainTasks(context);
         }
+        cycle++;
+        if (cycle % 10)
+        {
+            printf(".");
+        }
+        else
+        {
+            printf(".\n");
+        }
     }
 
     if (EXIT_SUCCESS == ret)
@@ -138,6 +148,7 @@ lExit:
     //clear all list elements
     while(context->tasks->first)
     {
+        printf("delete task %lu\n", ((struct stTask *)context->tasks->first->data)->taskId);
         freeTask((struct stTask *)context->tasks->first->data);
         removeEl(context->tasks, context->tasks->first);
     }
@@ -180,7 +191,7 @@ int processCreateCmd(struct stContext *context)
     uint64_t       min     = 0;
     uint32_t       hours   = 0;
     uint8_t        days    = 0;
-    int            argc    = 0;
+    uint32_t       argc    = 0;
     ssize_t        rezRead = 0;
     time_t         curTime = time(NULL);
     const size_t   prelySz = sizeof(uint16_t) + sizeof(uint64_t);
@@ -192,6 +203,14 @@ int processCreateCmd(struct stContext *context)
         retCode = EXIT_FAILURE;
         goto lExit;
     }
+
+    newTask->runs = (struct listElements_t *)malloc(sizeof(struct listElements_t));
+    if (!newTask->runs){
+        perror("memory allocation");
+        retCode = EXIT_FAILURE;
+        goto lExit;
+    }
+    memset(newTask->runs, 0, sizeof(struct listElements_t *));
 
     // read timing
     rezRead = read(context->pipeRequest, &min, sizeof(min));
@@ -208,7 +227,7 @@ int processCreateCmd(struct stContext *context)
         retCode = EXIT_FAILURE;
         goto lExit;
     }
-    hours = be64toh(hours);
+    hours = be32toh(hours);
 
     rezRead = read(context->pipeRequest, &days, sizeof(days));
     if (rezRead < sizeof(days)){
@@ -216,7 +235,6 @@ int processCreateCmd(struct stContext *context)
         retCode = EXIT_FAILURE;
         goto lExit;
     }
-    days = be64toh(days);
 
     // fill newTask daysOfWeek, hours, minutes 
     for (int i = 0; i < 7; i++){
@@ -251,7 +269,7 @@ int processCreateCmd(struct stContext *context)
         goto lExit;
     }
 
-    argc = be64toh(argc);
+    argc = be32toh(argc);
     newTask->argC = (size_t)argc;
     newTask->argV = (struct stString **)malloc(sizeof(struct stString *) * newTask->argC);
     if (!newTask->argV){
@@ -270,8 +288,8 @@ int processCreateCmd(struct stContext *context)
             retCode = EXIT_FAILURE;
             break;
         }
-                                        
-        newTask->argV[i] = createStringBuffer(be32toh(strLen));
+        strLen = be32toh(strLen); 
+        newTask->argV[i] = createStringBuffer(strLen);
 
         rezRead = read(context->pipeRequest, newTask->argV[i]->text, newTask->argV[i]->len);
         if (rezRead < newTask->argV[i]->len)
@@ -292,14 +310,20 @@ int processCreateCmd(struct stContext *context)
     newTask->taskId = ++context->lastTaskId;
     newTask->stCreated = *localtime(&curTime);
 
-    //{
-    //    char txtBuf[1024];
-    //    sprintf(txtBuf, "/tree/%llu/stdout", newTask->taskId);
-    //    struct stString *fileName = createFilePath(txtBuf);
-    //}
+    //https://linux.die.net/man/2/time
+    //time() returns the time as the number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). 
+    //So on POSIX system we can do math like that: 
+    //  https://linux.die.net/man/3/difftime
+    //  On a POSIX system, time_t is an arithmetic type, and one could just define
+    //  #define difftime(t1,t0) (double)(t1 - t0)
+    //  when the possible overflow in the subtraction is not a concern.     
+    curTime -= 59; //minus 59 seconds
+    //set last execution time in the past, to let function maintainTasks as soon as possible regarding schedule
+    newTask->stExecuted = *localtime(&curTime);
+    newTask->lastPid    = 0;
 
     *(uint16_t*)replyBuf = htobe16(SERVER_REPLY_OK);
-    *((uint64_t*)replyBuf + sizeof(uint16_t)) = htobe64(newTask->taskId);
+    *(uint64_t*)(replyBuf + sizeof(uint16_t)) = htobe64(newTask->taskId);
     retCode = writeReply(context, replyBuf, prelySz);
 
 lExit:
@@ -323,6 +347,13 @@ int processTimesExitCodesCmd(struct stContext *context)
     return EXIT_SUCCESS;
 }
 
+int processTerminate(struct stContext *context)
+{
+    uint16_t rep = htobe16(SERVER_REPLY_OK);
+    context->exit = 1;
+    return writeReply(context, (uint8_t*)&rep, sizeof(rep));
+}
+
 int processStdOutCmd(struct stContext *context)
 {
     return EXIT_SUCCESS;
@@ -332,9 +363,71 @@ int processStdErrCmd(struct stContext *context)
 {
     return EXIT_SUCCESS;
 }
-int maintainTasks(struct stContext *context)
-{
-    return EXIT_SUCCESS;
+
+
+int maintainTasks(struct stContext *context){
+    int               ret       = EXIT_SUCCESS;
+    time_t            curTime   = time(NULL);
+    struct tm         stCurTime = *localtime(&curTime);
+    struct element_t *taskEl    = context->tasks->first;
+    while ((taskEl) && (EXIT_SUCCESS == ret))
+    {
+        struct stTask * task = (struct stTask *)(taskEl->data);
+
+        time_t taskLastExecTime = mktime(&task->stExecuted);
+
+        if (    (0 < task->lastPid)
+             && (5.0 <= difftime(curTime, taskLastExecTime)) //5 seconds later
+           )
+        {
+            int status = 0;
+            pid_t pidR = waitpid(task->lastPid, &status, WNOHANG);
+            if (pidR == -1){
+                perror("wait error!");
+                ret = EXIT_FAILURE;
+            } else if (pidR == 0){
+                //still rinning!
+            } else {
+                struct stRunStat* run = (struct stRunStat*)malloc(sizeof(struct stRunStat));
+                if (run)
+                {
+                    run->stTime = task->stExecuted;
+                    run->code = status;
+                    pushLast(task->runs, run);
+                }
+
+                task->lastPid = 0;
+                CLOSE_FILE(task->stdOut);
+                CLOSE_FILE(task->stdErr);
+            }
+        }
+
+        //We have min granularity of 1minute.
+        //if since last execution more than 60 seconds passed. 
+        //and task is programmed to be executed during current time
+        if (    (0 == task->lastPid)
+             && (60.0 <= difftime(curTime, taskLastExecTime))
+             && (task->daysOfWeek[stCurTime.tm_wday])
+             && (task->hours[stCurTime.tm_hour])
+             && (task->minutes[stCurTime.tm_min])
+           ){
+               ret = execTask(context, task);
+               if ( EXIT_SUCCESS == ret)
+               {
+                    printf("%02u:%02u:%02u Execute task %lu, {%s}\n", 
+                    stCurTime.tm_hour,
+                    stCurTime.tm_min,
+                    stCurTime.tm_sec,
+                    task->taskId, task->argV[0]->text);
+
+                    task->stExecuted = stCurTime;    
+               }
+        }
+
+        taskEl = taskEl->next;
+    }
+
+    return ret;
 }
 
 
@@ -408,6 +501,12 @@ int freeTask(struct stTask *task){
     }
     
     free(task->argV);
+
+    while(task->runs->first){
+        free(task->runs->first->data);
+        removeEl(task->runs, task->runs->first);
+    }
+    free(task->runs);
 
     free(task);
     return 0;
@@ -497,5 +596,73 @@ int writeReply(struct stContext *context, const uint8_t *buff, size_t size)
 
 lExit:
     CLOSE_FILE(context->pipeReply);
+    return ret;
+}
+
+
+int execTask(struct stContext *context, struct stTask * task)
+{
+    int ret = EXIT_SUCCESS;
+    struct stString *fileOut = NULL;
+    struct stString *fileErr = NULL;
+    char txtBuf[1024];
+
+    char ** argv = (char **)malloc(sizeof(char *)*(task->argC));
+    if (!argv) {
+        perror("read arg text");
+        ret = EXIT_FAILURE;
+        goto lExit;
+    }
+    
+    for (size_t i = 1; i < task->argC; i++){
+        argv[i] = task->argV[i]->text;
+    }
+    argv[task->argC - 1] = NULL;
+
+    sprintf(txtBuf, "/tree/%lu/stdout", task->taskId);
+    fileOut = createFilePath(txtBuf);
+    sprintf(txtBuf, "/tree/%lu/stderr", task->taskId);
+    fileErr = createFilePath(txtBuf);
+
+    task->stdOut = open(fileOut->text, 
+                        O_CREAT | O_RDWR | O_TRUNC,
+                        S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR | S_IWGRP | S_IWOTH);
+    task->stdErr = open(fileOut->text, 
+                        O_CREAT | O_RDWR | O_TRUNC, 
+                        S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR | S_IWGRP | S_IWOTH);
+
+    if (    (task->stdOut < 0)                    
+         || (task->stdErr < 0)                 
+       ){
+        perror("file open failed");
+        ret = EXIT_FAILURE;
+        goto lExit;
+    }
+
+    task->lastPid = fork();
+    if (-1 == task->lastPid) 
+    {
+        perror("Fork failed");
+        ret = EXIT_FAILURE;
+        goto lExit;
+    } 
+    else if (0 == task->lastPid) 
+    {
+        dup2(task->stdOut, STDOUT_FILENO);
+        dup2(task->stdErr, STDERR_FILENO);
+        execvp(task->argV[0]->text, argv);
+    } 
+
+lExit:
+    FREE_STR(fileOut);
+    FREE_STR(fileErr);
+    FREE_MEM(argv);
+
+    if (ret != EXIT_SUCCESS)
+    {
+        CLOSE_FILE(task->stdOut);
+        CLOSE_FILE(task->stdErr);
+    }
+
     return ret;
 }

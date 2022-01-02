@@ -31,7 +31,7 @@ char *create_path(char *pipes_directory, int isRequets) {
 }
 
 // function times exitcodes
-int times_exitcodes(int request, int reply, uint64_t taskid) {
+int times_exitcodes(char* request, char* reply, uint64_t taskid) {
     int retCode = EXIT_SUCCESS;
 
     // create buffer for request
@@ -56,18 +56,22 @@ int times_exitcodes(int request, int reply, uint64_t taskid) {
         bufIter += sizeof(uint64_t);
 
         // write from buffer to pipe
-        ssize_t resRequest = write(request, buf, 2 + sizeof(uint64_t));
+
+        int pipe_req = open(request, O_WRONLY);
+        ssize_t resRequest = write(pipe_req, buf, 2 + sizeof(uint64_t));
         if (resRequest != 2 + sizeof(uint64_t)) {
             perror("write to pipe failure");
             retCode = EXIT_FAILURE;
         }
+        CLOSE_FILE(pipe_req);
     }
 
     if (EXIT_SUCCESS == retCode) {
         const int lenAnswer = sizeof(uint16_t);
         uint8_t bufReply[lenAnswer];
+        int pipe_rep = open(reply, O_RDONLY);
         while (1) {
-            ssize_t rezRead = read(reply, bufReply, lenAnswer);
+            ssize_t rezRead = read(pipe_rep, bufReply, lenAnswer);
             if (0 == rezRead)
                 continue;                     // no answer, continue to listening
             else if (rezRead == lenAnswer) {  // check if correct response
@@ -79,7 +83,7 @@ int times_exitcodes(int request, int reply, uint64_t taskid) {
                     const int lenAnswerNB = sizeof(uint32_t);
                     uint8_t bufReplyNB[lenAnswerNB];
                     while (1) {
-                        ssize_t rezReadNB = read(reply, bufReplyNB, lenAnswerNB);
+                        ssize_t rezReadNB = read(pipe_rep, bufReplyNB, lenAnswerNB);
                         if (0 == rezReadNB)
                             continue;                         // no answer, continue to listening
                         else if (rezReadNB == lenAnswerNB) {  // check if correct response
@@ -93,7 +97,7 @@ int times_exitcodes(int request, int reply, uint64_t taskid) {
                             for (int i = 0; i < nbruns; ++i) {
                                 // retrieve the time spent by task and its id
                                 while (1) {
-                                    ssize_t rezRead = read(reply, bufReplyOk, lenAnswerOk);
+                                    ssize_t rezRead = read(pipe_rep, bufReplyOk, lenAnswerOk);
                                     if (0 == rezRead)
                                         continue;  // no answer, continue to listening
                                     else if (rezRead ==
@@ -135,13 +139,14 @@ int times_exitcodes(int request, int reply, uint64_t taskid) {
             }
             break;
         }
+        CLOSE_FILE(pipe_rep);
     }
     FREE_MEM(buf);
     return retCode;
 }
 
 // function list task
-int list_task(int request, int reply) {
+int list_task(char* request, char* reply) {
     int retCode = EXIT_SUCCESS;
 
     // create buffer for request
@@ -162,19 +167,23 @@ int list_task(int request, int reply) {
         bufIter += CLIENT_REQUEST_HEADER_SIZE;
 
         // write from buffer to pipe
-        ssize_t resRequest = write(request, buf, 2);
+
+        int pipe_req = open(request, O_WRONLY);
+        ssize_t resRequest = write(pipe_req, buf, 2);
         if (resRequest != 2) {
             perror("write to pipe failure");
             retCode = EXIT_FAILURE;
         }
+        CLOSE_FILE(pipe_req);
     }
 
     // read request to pipe
     if (EXIT_SUCCESS == retCode) {
         const int lenResponse = sizeof(uint16_t) + sizeof(uint32_t);
         uint8_t bufResponse[lenResponse];
+        int pipe_rep = open(reply, O_RDONLY);
         while (1) {
-            ssize_t readBuf = read(reply, bufResponse, lenResponse);
+            ssize_t readBuf = read(pipe_rep, bufResponse, lenResponse);
             if (readBuf == 0)
                 continue;
             else if (lenResponse == readBuf) {
@@ -186,7 +195,7 @@ int list_task(int request, int reply) {
 
                 uint8_t tabTasks[sizeof(uint64_t) + CLIENT_TIMING_SIZE + sizeof(uint32_t)];
                 while (numberProcess != 0 != 0) {
-                    ssize_t readBufTask = read(reply, tabTasks, sizeof(uint64_t) + CLIENT_TIMING_SIZE + sizeof(uint32_t));
+                    ssize_t readBufTask = read(pipe_rep, tabTasks, sizeof(uint64_t) + CLIENT_TIMING_SIZE + sizeof(uint32_t));
                     if (readBufTask == 0)
                         continue;
                     else if (sizeof(uint64_t) + CLIENT_TIMING_SIZE + sizeof(uint32_t) == readBufTask) {
@@ -220,7 +229,7 @@ int list_task(int request, int reply) {
                             char *result = malloc(sizeof(char));
                             uint8_t bufsizeword[sizeof(uint32_t)];
                             for (int i = 0; i < cmdArgc; ++i) {
-                                ssize_t readsize = read(reply, bufsizeword, sizeof(uint32_t));
+                                ssize_t readsize = read(pipe_rep, bufsizeword, sizeof(uint32_t));
                                 if (readsize == -1) {
                                     perror("read from pipe-reply failure");
                                     retCode = EXIT_FAILURE;
@@ -234,7 +243,7 @@ int list_task(int request, int reply) {
 
                                 // Get an argument
                                 uint8_t bufword[sizeofword];
-                                ssize_t readword = read(reply, bufword, sizeofword);
+                                ssize_t readword = read(pipe_rep, bufword, sizeofword);
                                 if (readword == -1) {
                                     perror("read from pipe-reply failure");
                                     retCode = EXIT_FAILURE;
@@ -271,7 +280,7 @@ int list_task(int request, int reply) {
 
                             // get the next argument
                             if (m != numberProcess - 1) {
-                                readBufTask = read(reply, tabTasks,
+                                readBufTask = read(pipe_rep, tabTasks,
                                                    sizeof(uint64_t) + CLIENT_TIMING_SIZE +
                                                        sizeof(uint32_t));
                                 if (readBufTask == -1) {
@@ -296,13 +305,14 @@ int list_task(int request, int reply) {
                 break;
             }
         }
+        CLOSE_FILE(pipe_rep);
     }
     FREE_MEM(buf);
     return retCode;
 }
 
 // function create task
-int create_task(int request, int reply, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[]) {
+int create_task(char* request, char* reply, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[]) {
     int retCode = EXIT_SUCCESS;
     struct timing dest;
 
@@ -366,11 +376,16 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
         }
 
         // write from buffer to pipe
-        ssize_t resRequest = write(request, buf, count);
+
+        int pipe_req = open(request, O_WRONLY);
+        printf("{%s} write: %d, count=%zu\n", request, pipe_req, (size_t)count);
+        perror("open ..");
+        ssize_t resRequest = write(pipe_req, buf, count);
         if (resRequest < (ssize_t)count) {
             perror("write to pipe failure");
             retCode = EXIT_FAILURE;
         }
+        CLOSE_FILE(pipe_req);
     }
 
     // read the answer of saturnd from reply pipe
@@ -378,8 +393,9 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
     if (EXIT_SUCCESS == retCode) {
         const int lenAnswer = sizeof(uint16_t) + sizeof(uint64_t);
         uint8_t bufReply[lenAnswer];
+        int pipe_rep = open(reply, O_RDONLY);
         while (1) {
-            ssize_t rezRead = read(reply, bufReply, lenAnswer);
+            ssize_t rezRead = read(pipe_rep, bufReply, lenAnswer);
             if (0 == rezRead)  // no answer, continue to listening
             {
                 continue;
@@ -405,6 +421,7 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
                 break;
             }
         }
+        CLOSE_FILE(pipe_rep);
     }
     // free memory
     FREE_MEM(buf);
@@ -412,7 +429,7 @@ int create_task(int request, int reply, char *minutes_str, char *hours_str, char
 }
 
 // function remove task
-int remove_task(int request, int reply, uint64_t taskid) {
+int remove_task(char* request, char* reply, uint64_t taskid) {
     int retCode = EXIT_SUCCESS;
 
     // find the length of request: request's pattern : OPCODE='RM' <uint16>, TASKID <uint64>
@@ -439,11 +456,14 @@ int remove_task(int request, int reply, uint64_t taskid) {
         bufIter += sizeof(taskId);
 
         // write from buffer to pipe
-        ssize_t resRequest = write(request, buf, count);
+
+        int pipe_req = open(request, O_WRONLY);
+        ssize_t resRequest = write(pipe_req, buf, count);
         if (resRequest < (ssize_t)count) {
             perror("write to pipe failure");
             retCode = EXIT_FAILURE;
         }
+        CLOSE_FILE(pipe_req);
     }
 
     // read the answer of saturnd from reply pipe
@@ -452,8 +472,9 @@ int remove_task(int request, int reply, uint64_t taskid) {
     if (EXIT_SUCCESS == retCode) {
         const int lenAnswer = 2 * sizeof(uint16_t);
         uint32_t bufReply[lenAnswer];
+        int pipe_rep = open(reply, O_RDONLY);
         while (1) {
-            ssize_t rezRead = read(reply, bufReply, lenAnswer);
+            ssize_t rezRead = read(pipe_rep, bufReply, lenAnswer);
             if (0 == rezRead)  // no answer, continue to listening
             {
                 continue;
@@ -485,13 +506,14 @@ int remove_task(int request, int reply, uint64_t taskid) {
                 break;
             }
         }
+        CLOSE_FILE(pipe_rep);
     }
     // free memory
     FREE_MEM(buf);
     return retCode;
 }
 
-int rq_stdout_stderr(int request, int reply, uint64_t taskid, uint16_t operation) {
+int rq_stdout_stderr(char* request, char* reply, uint64_t taskid, uint16_t operation) {
     int retCode = EXIT_SUCCESS;
     size_t count = sizeof(uint16_t) + sizeof(uint64_t);
     void *buf = malloc(count);
@@ -510,7 +532,9 @@ int rq_stdout_stderr(int request, int reply, uint64_t taskid, uint16_t operation
         bufIter += CLIENT_REQUEST_HEADER_SIZE;
         memcpy(bufIter, &id, sizeof(uint64_t));
         bufIter += sizeof(uint64_t);
-        ssize_t resRequest = write(request, buf, count);
+        int pipe_req = open(request, O_WRONLY);
+        ssize_t resRequest = write(pipe_req, buf, count);
+        CLOSE_FILE(pipe_req);
         if (resRequest < (ssize_t)count) {
             perror("write to pipe failure");
             retCode = EXIT_FAILURE;
@@ -519,8 +543,9 @@ int rq_stdout_stderr(int request, int reply, uint64_t taskid, uint16_t operation
     if (EXIT_SUCCESS == retCode) {
         const int lenAnswer = sizeof(uint16_t);
         uint8_t bufReply[lenAnswer];
+        int pipe_rep = open(reply, O_RDONLY);
         while (1) {
-            ssize_t resRead = read(reply, bufReply, lenAnswer);
+            ssize_t resRead = read(pipe_rep, bufReply, lenAnswer);
             if (0 == resRead) {
                 continue;
             } else if (resRead == lenAnswer) {
@@ -529,7 +554,7 @@ int rq_stdout_stderr(int request, int reply, uint64_t taskid, uint16_t operation
 
                 if (ResCode == SERVER_REPLY_ERROR) {
                     uint8_t buffReply[sizeof(uint16_t)];
-                    ssize_t readErr = read(reply, buffReply, sizeof(uint16_t));
+                    ssize_t readErr = read(pipe_rep, buffReply, sizeof(uint16_t));
                     if (readErr == sizeof(uint16_t)) {
                         uint16_t codeErr = *(uint16_t *)buffReply;
                         codeErr = be16toh(codeErr);
@@ -543,14 +568,14 @@ int rq_stdout_stderr(int request, int reply, uint64_t taskid, uint16_t operation
                     break;
                 } else {
                     uint8_t buffReply[sizeof(uint32_t)];
-                    ssize_t r = read(reply, buffReply, sizeof(uint32_t));
+                    ssize_t r = read(pipe_rep, buffReply, sizeof(uint32_t));
                     if (r != sizeof(uint32_t))
                         perror("read from pipe-reply failure");
                     else {
                         uint32_t length = *(uint32_t *)buffReply;
                         length = be32toh(length);
                         uint8_t buffer[length + 1];
-                        ssize_t readString = read(reply, buffer, length);
+                        ssize_t readString = read(pipe_rep, buffer, length);
                         buffer[length] = '\0';
                         if (readString != length)
                             perror("read from pipe-reply failure");
@@ -565,13 +590,15 @@ int rq_stdout_stderr(int request, int reply, uint64_t taskid, uint16_t operation
                 break;
             }
         }
+        CLOSE_FILE(pipe_rep);
     }
     FREE_MEM(buf);
     return retCode;
 }
 
 // function terminate
-int terminate(int request, int reply) {
+int terminate(char* request, char* reply) {
+
     int retCode = EXIT_SUCCESS;
     size_t count = sizeof(uint16_t);
     void *buf = malloc(count);
@@ -586,17 +613,20 @@ int terminate(int request, int reply) {
 
         memcpy(bufIter, &opCode, CLIENT_REQUEST_HEADER_SIZE);
         bufIter += CLIENT_REQUEST_HEADER_SIZE;
-        ssize_t resRequest = write(request, buf, count);
+        int pipe_req = open(request, O_WRONLY);
+        ssize_t resRequest = write(pipe_req, buf, count);
         if (resRequest < (ssize_t)count) {
             perror("write to pipe failure");
             retCode = EXIT_FAILURE;
         }
+        CLOSE_FILE(pipe_req);
     }
     if (EXIT_SUCCESS == retCode) {
         const int lenAnswer = sizeof(uint16_t);
         uint8_t bufReply[lenAnswer];
+        int pipe_rep = open(reply, O_RDONLY);
         while (1) {
-            ssize_t rezRead = read(reply, bufReply, lenAnswer);
+            ssize_t rezRead = read(pipe_rep, bufReply, lenAnswer);
             if (0 == rezRead)  // no answer, continue to listening
             {
                 continue;
@@ -619,6 +649,7 @@ int terminate(int request, int reply) {
                 break;
             }
         }
+        CLOSE_FILE(pipe_rep);
     }
     FREE_MEM(buf);
     return retCode;
