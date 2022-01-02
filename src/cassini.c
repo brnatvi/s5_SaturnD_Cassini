@@ -117,6 +117,8 @@ int main(int argc, char *argv[]) {
         goto error;
     }
 
+    printf("Req{%s} Rep{%s}\n", pipe_dir_req, pipe_dir_rep);
+
     // obtain fd for reply-pipe and request-pipe
 
     /*if ((pipe_req < 0) || (pipe_rep < 0)) {
