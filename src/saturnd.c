@@ -2,8 +2,6 @@
 
 int main(int argc, char *argv[]) 
 {
-    struct stString *pipeReqName = NULL;
-    struct stString *pipeRepName = NULL;
     int              ret         = EXIT_SUCCESS;
     struct pollfd    fds[1];
 
@@ -31,35 +29,31 @@ int main(int argc, char *argv[])
     // 2) if not existing: creates 2 pipes, else: open
     // default  /tmp/<USER_NAME>/saturnd/pipes or -p <PIPES_DIR>
     // create path 
-    pipeReqName = createFilePath("pipes" PIPE_REQUEST_NAME);
-    pipeRepName = createFilePath("pipes" PIPE_REPLY_NAME);
+    context->pipeReqName = createFilePath("pipes" PIPE_REQUEST_NAME);
+    context->pipeRepName = createFilePath("pipes" PIPE_REPLY_NAME);
 
-    printf("{%s} {%s}\n", pipeReqName->text, pipeRepName->text);
-    printf("DBG:3\n");
+    printf("{%s} {%s}\n", context->pipeReqName->text, context->pipeRepName->text);
 
-    if (!isFileExists(pipeReqName->text)){
-        if (mkfifo(pipeReqName->text, S_IRUSR | S_IRGRP | S_IROTH) < 0){
+    if (!isFileExists(context->pipeReqName->text)){
+        if (mkfifo(context->pipeReqName->text, S_IRUSR | S_IRGRP | S_IROTH) < 0){
             perror("make fifo is failure");
             ret = EXIT_FAILURE;
             goto lExit;
         }
     }
 
-    printf("DBG:4\n");
-    if (!isFileExists(pipeRepName->text)){
-        if (mkfifo(pipeRepName->text, S_IRUSR | S_IRGRP | S_IROTH) < 0){
+    if (!isFileExists(context->pipeRepName->text)){
+        if (mkfifo(context->pipeRepName->text, S_IRUSR | S_IRGRP | S_IROTH) < 0){
             perror("make fifo is failure");
             ret = EXIT_FAILURE;
             goto lExit;
         }
     }
 
-    printf("DBG:5\n");
     // obtain fd for reply-pipe and request-pipe, using NONBLOCK more for request FIFO to be capable to open it 
     //even if on other side there is no any process
-    context->pipeRequest = open(pipeReqName->text, O_RDONLY | O_NONBLOCK);        // open return -1 or fd
+    context->pipeRequest = open(context->pipeReqName->text, O_RDONLY | O_NONBLOCK);        // open return -1 or fd
     //context->pipeReply   = open(pipe_dir_rep, O_WRONLY | O_NONBLOCK);
-    printf("DBG:6\n");
 
     if (context->pipeRequest < 0){
         perror("open fifo is failed");
@@ -69,7 +63,7 @@ int main(int argc, char *argv[])
 
     // 3) Load from disc list of the tasks and store it in context->pTasks
     ret = restoreTasksFromHdd(context);
-    if (EXIT_SUCCESS == ret)
+    if (EXIT_SUCCESS != ret)
     {
         goto lExit;
     }
@@ -153,10 +147,11 @@ lExit:
     CLOSE_FILE(context->pipeReply);
     CLOSE_FILE(context->pipeRequest);   
 
+    FREE_STR(context->pipeReqName);
+    FREE_STR(context->pipeRepName);
+
     FREE_MEM(context);
 
-    FREE_STR(pipeReqName);
-    FREE_STR(pipeRepName);
     return ret;
 }
 
@@ -188,10 +183,11 @@ int processCreateCmd(struct stContext *context)
     int            argc    = 0;
     ssize_t        rezRead = 0;
     time_t         curTime = time(NULL);
-    struct stTask *newTask = (struct stTask*) malloc(sizeof(struct stTask)); // create structure for new task
+    const size_t   prelySz = sizeof(uint16_t) + sizeof(uint64_t);
+    uint8_t        replyBuf[prelySz];
+    struct stTask *newTask = (struct stTask*) malloc(sizeof(struct stTask)); //create structure for new task
 
-    if (!newTask)
-    {
+    if (!newTask){
         perror("memory allocation");
         retCode = EXIT_FAILURE;
         goto lExit;
@@ -199,8 +195,7 @@ int processCreateCmd(struct stContext *context)
 
     // read timing
     rezRead = read(context->pipeRequest, &min, sizeof(min));
-    if (rezRead < sizeof(min))
-    {
+    if (rezRead < sizeof(min)){
         perror("read minutes");
         retCode = EXIT_FAILURE;
         goto lExit;
@@ -208,8 +203,7 @@ int processCreateCmd(struct stContext *context)
     min = be64toh(min);
 
     rezRead = read(context->pipeRequest, &hours, sizeof(hours));
-    if (rezRead < sizeof(hours))
-    {
+    if (rezRead < sizeof(hours)){
         perror("read hours");
         retCode = EXIT_FAILURE;
         goto lExit;
@@ -217,8 +211,7 @@ int processCreateCmd(struct stContext *context)
     hours = be64toh(hours);
 
     rezRead = read(context->pipeRequest, &days, sizeof(days));
-    if (rezRead < sizeof(days))
-    {
+    if (rezRead < sizeof(days)){
         perror("read daysOfWeek");
         retCode = EXIT_FAILURE;
         goto lExit;
@@ -226,55 +219,42 @@ int processCreateCmd(struct stContext *context)
     days = be64toh(days);
 
     // fill newTask daysOfWeek, hours, minutes 
-    for (int i = 0; i < 7; i++)
-    {
-        if (days & (1 << i))
-        {
+    for (int i = 0; i < 7; i++){
+        if (days & (1 << i)) {
             newTask->daysOfWeek[i] = 1;
-        }
-        else
-        {
+        } else {
             newTask->daysOfWeek[i] = 0;
         }
     }
 
-    for (int i = 0; i < 24; i++)
-    {
-        if (hours & (1 << i))
-        {
+    for (int i = 0; i < 24; i++){
+        if (hours & (1 << i)){
             newTask->hours[i] = 1;
-        }
-        else
-        {
+        } else {
             newTask->hours[i] = 0;
         }
     }
 
-    for (int i = 0; i < 60; i++)
-    {
-        if (min & (1 << i))
-        {
+    for (int i = 0; i < 60; i++) {
+        if (min & (1 << i)) {
             newTask->minutes[i] = 1;
-        }
-        else
-        {
+        } else {
             newTask->minutes[i] = 0;
         }
     }
 
     // fill argC
     rezRead = read(context->pipeRequest, &argc, sizeof(argc));
-    if (rezRead < sizeof(argc))
-    {
+    if (rezRead < sizeof(argc)){
         perror("read argc");
         retCode = EXIT_FAILURE;
         goto lExit;
     }
+
     argc = be64toh(argc);
     newTask->argC = (size_t)argc;
     newTask->argV = (struct stString **)malloc(sizeof(struct stString *) * newTask->argC);
-    if (!newTask->argV)
-    {
+    if (!newTask->argV){
         perror("memory allocation");
         retCode = EXIT_FAILURE;
         goto lExit;
@@ -312,7 +292,24 @@ int processCreateCmd(struct stContext *context)
     newTask->taskId = ++context->lastTaskId;
     newTask->stCreated = *localtime(&curTime);
 
+    //{
+    //    char txtBuf[1024];
+    //    sprintf(txtBuf, "/tree/%llu/stdout", newTask->taskId);
+    //    struct stString *fileName = createFilePath(txtBuf);
+    //}
+
+    *(uint16_t*)replyBuf = htobe16(SERVER_REPLY_OK);
+    *((uint64_t*)replyBuf + sizeof(uint16_t)) = htobe64(newTask->taskId);
+    retCode = writeReply(context, replyBuf, prelySz);
+
 lExit:
+    if (EXIT_SUCCESS == retCode){
+        pushLast(context->tasks, newTask);
+    } else {
+        freeTask(newTask);
+        newTask = NULL;
+    }
+
     return retCode;
 }
 
@@ -475,4 +472,30 @@ int isFileExists(const char *path){
     }
 
     return 0;
+}
+
+
+int writeReply(struct stContext *context, const uint8_t *buff, size_t size)
+{
+    int ret = EXIT_SUCCESS;
+    if (!context || !buff){
+        return EXIT_FAILURE;
+    }    
+
+    context->pipeReply = open(context->pipeRepName->text, O_WRONLY);   
+    if (context->pipeReply < 0){
+        perror("open fifo is failed");
+        ret = EXIT_FAILURE;
+        goto lExit;
+    }
+
+    if (write(context->pipeReply, buff, size) < (ssize_t)size) {
+        perror("write to pipe failure");
+        ret = EXIT_FAILURE;
+        goto lExit;
+    }
+
+lExit:
+    CLOSE_FILE(context->pipeReply);
+    return ret;
 }

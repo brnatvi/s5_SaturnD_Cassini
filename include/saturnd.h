@@ -42,7 +42,7 @@ struct stTask
     int               stdErr;
     struct tm         stCreated;
     struct tm         stExecuted;
-} ;
+};
 
 struct stContext
 {
@@ -51,6 +51,8 @@ struct stContext
     int                     pipeReply;
     uint64_t                lastTaskId; 
     int                     exit;
+    struct stString        *pipeReqName;
+    struct stString        *pipeRepName;
 };
 
 
@@ -77,5 +79,7 @@ struct stString *createFilePath(const char *postfix);
 
 int              isDirExists(const char *path);
 int              isFileExists(const char *path);
+int              writeReply(struct stContext *context, const uint8_t *buff, size_t size);
+
 
 #endif //SATURND_H
