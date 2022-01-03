@@ -16,10 +16,8 @@
 
 #include "client-request.h"
 #include "server-reply.h"
-
-#define CLOSE_FILE(File) if (File > 0) {close(File); File = -1;}
-#define FREE_MEM(Mem) if (Mem) {free(Mem); Mem = NULL;}
-
+#include "pipes-path.h"
+#include "common-utils.h"
 
 char * create_path(char *pipes_directory, int isRequets);
 int create_task(char* request, char* reply, char *minutes_str, char *hours_str, char *daysofweek_str, int argc, char *argv[]);

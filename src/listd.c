@@ -16,7 +16,6 @@ int removeEl(struct listElements_t *list, struct element_t *el)
         el->prev->next = el->next;
         el->next->prev = el->prev;
     }
-    
     else
     { 
         result = -1;
@@ -45,6 +44,8 @@ int removeEl(struct listElements_t *list, struct element_t *el)
         }
     }
 
+    free(el);
+
     list->count--;
 
     return result;
@@ -60,6 +61,9 @@ struct element_t* addEl(struct listElements_t *list, struct element_t *prevEl, v
         return NULL;
     }
 
+    newEl->data = data;
+    newEl->next = NULL;
+    newEl->prev = NULL;
     list->count++;
     
     if (prevEl)
@@ -118,7 +122,7 @@ void* pullLast(struct listElements_t *list)
 // Push first (add first + return struct)
 struct element_t* pushFirst(struct listElements_t *list, void *data)
 {
-    return addEl(list, 0, data);
+    return addEl(list, list->first, data);
 }
 
 // Push last (add last + return struct)
