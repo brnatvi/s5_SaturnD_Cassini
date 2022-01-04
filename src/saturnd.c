@@ -2,6 +2,9 @@
 
 int main(int argc, char *argv[]) 
 {
+
+    //run_daemon();
+
     int              ret = EXIT_SUCCESS;
     struct pollfd    fds[1];
     int              cycle = 0;
@@ -71,6 +74,15 @@ int main(int argc, char *argv[])
     {
         goto lExit;
     }
+
+    /*
+    while (1){
+        // here: Insert daemon code.
+        syslog (LOG_NOTICE, "First daemon started.");
+    }
+    syslog (LOG_NOTICE, "First daemon terminated.");
+    closelog();
+     **/
 
     // 4) Organize loop
     // - listen request-pipe, if something arrive - read first 2 bytes (OPCODE) and delegate read and execute the rest to 

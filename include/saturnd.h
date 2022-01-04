@@ -24,6 +24,7 @@
 #include "server-reply.h"
 #include "pipes-path.h"
 #include "common-utils.h"
+#include "run-daemon.h"
 
 struct stString
 {
