@@ -50,8 +50,8 @@ struct stTask
     int                    stdErr;
     struct tm              stCreated;
     struct tm              stExecuted;
-    pid_t                  lastPid;
-    struct listElements_t *runs; //list of stRunStat
+    pid_t                  lastPid;        //pid of his last process
+    struct listElements_t *runs;           //list of stRunStat
 };
 
 struct stContext
@@ -71,11 +71,11 @@ int saveTasksToHdd(struct stContext *context);
 int processListCmd(struct stContext *context);
 int processCreateCmd(struct stContext *context);        //done
 int processRemoveCmd(struct stContext *context);        //done
-int processTimesExitCodesCmd(struct stContext *context);//done
-int processTerminate(struct stContext *context);
+int processTimesExitCodesCmd(struct stContext *context);
+int processTerminate(struct stContext *context);        
 int processStdOutCmd(struct stContext *context);
 int processStdErrCmd(struct stContext *context);
-int maintainTasks(struct stContext *context);
+int maintainTasks(struct stContext *context);           //done
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                               auxillary functions

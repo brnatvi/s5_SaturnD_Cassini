@@ -8,12 +8,12 @@ int main(int argc, char *argv[])
 
     // 1) Create context stContext 
     struct stContext *context = (struct stContext*) malloc(sizeof(struct stContext));
-    if (!context) {
+    if (!context) 
+    {
         perror("malloc context is failed");
         ret = EXIT_FAILURE;
         goto lExit;
-    }
-    
+    }    
     memset(context, 0, sizeof(struct stContext));
 
     context->tasks = (struct listElements_t*) malloc(sizeof(struct listElements_t));
@@ -27,14 +27,11 @@ int main(int argc, char *argv[])
     context->pipeReply   = -1;
     context->pipeRequest = -1;
 
-    // 2) if not existing: creates 2 pipes, else: open
-    // default  /tmp/<USER_NAME>/saturnd/pipes or -p <PIPES_DIR>
+    // 2) if not existing: creates 2 pipes /tmp/<USER_NAME>/saturnd/pipes, else open
     // create path 
     context->pipeReqName = createFilePath("pipes" PIPE_REQUEST_NAME);
     context->pipeRepName = createFilePath("pipes" PIPE_REPLY_NAME);
-
-    printf("Req{%s} Rep{%s}\n", context->pipeReqName->text, context->pipeRepName->text);
-
+ 
     if (!isFileExists(context->pipeReqName->text)){
         if (mkfifo(context->pipeReqName->text, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) < 0){
             perror("make fifo is failure");
@@ -81,8 +78,7 @@ int main(int argc, char *argv[])
     // 
     //          read the rest 
     //                          auxilairy function (how match bytes need to reed),
-    //                                    which handle timeout and return the part read 
-    //                                    what if cassini doesn't sent all?????
+    //                                    which handle timeout and return the part read                                   
     //          put the task to list
     //          execute the task by fork
     //          send the report to reply-pipe
@@ -92,17 +88,16 @@ int main(int argc, char *argv[])
     fds[0].events  = POLLIN;
     fds[0].revents = 0;    
 
-    while (    (0 == context->exit)
-            && (EXIT_SUCCESS == ret)
-          ) 
+    // while exit-signal doesn't received && have not errors
+    while ((0 == context->exit) && (EXIT_SUCCESS == ret)) 
     {
         int pollRet = poll(fds, 1, 500); //2 times per second
-        if (0 < pollRet){
-            uint16_t code = 0x0;
+        if (pollRet > 0) {
+            uint16_t code = 0;
             size_t szRead = read(context->pipeRequest, &code, sizeof(code));
-            if (szRead == sizeof(code)){
+            if (szRead == sizeof(code))
+            {
                 code = be16toh(code);
-
                 switch (code){
                     case CLIENT_REQUEST_LIST_TASKS              : ret = processListCmd(context); break;
                     case CLIENT_REQUEST_CREATE_TASK             : ret = processCreateCmd(context); break;
@@ -118,49 +113,43 @@ int main(int argc, char *argv[])
                 }
             }
 
-        } else if (0 > pollRet) { 
+        } else if (pollRet < 0){ 
             perror("poll error");
             ret = EXIT_FAILURE;
             break;
         }
 
-        if (EXIT_SUCCESS == ret)
-        {
+        if (EXIT_SUCCESS == ret){
             ret = maintainTasks(context);
         }
-        cycle++;
-        if (cycle % 10)
-        {
-            printf(".");
-        }
-        else
-        {
-            printf(".\n");
-        }
+      //  cycle++;
+      //  if (cycle % 10)
+      //  {
+      //      printf(".");
+      //  }
+      //  else
+      //  {
+      //      printf(".\n");
+      //  }
     }
 
-    if (EXIT_SUCCESS == ret)
-    {
+    if (EXIT_SUCCESS == ret){
         ret = saveTasksToHdd(context);
     }
 
 lExit:
     //clear all list elements
-    while(context->tasks->first)
-    {
+    while(context->tasks->first){
         printf("delete task %lu\n", ((struct stTask *)context->tasks->first->data)->taskId);
         freeTask((struct stTask *)context->tasks->first->data);
         removeEl(context->tasks, context->tasks->first);
     }
 
     FREE_MEM(context->tasks); 
-
     CLOSE_FILE(context->pipeReply);
-    CLOSE_FILE(context->pipeRequest);   
-
+    CLOSE_FILE(context->pipeRequest);  
     FREE_STR(context->pipeReqName);
     FREE_STR(context->pipeRepName);
-
     FREE_MEM(context);
 
     return ret;
@@ -169,24 +158,21 @@ lExit:
 
 
 // Restore content of context->tasks from disk
-int restoreTasksFromHdd(struct stContext *context)
-{    
+int restoreTasksFromHdd(struct stContext *context){    
     return EXIT_SUCCESS;
 }
 
 // Save content of context->tasks to disk
-int saveTasksToHdd(struct stContext *context)
-{
+int saveTasksToHdd(struct stContext *context){
     return EXIT_SUCCESS;
 }
 
-int processListCmd(struct stContext *context)
-{
+int processListCmd(struct stContext *context){
     return EXIT_SUCCESS;
 }
 
-int processCreateCmd(struct stContext *context)
-{
+int processCreateCmd(struct stContext *context){
+
     int            retCode = EXIT_SUCCESS;
     uint64_t       min     = 0;
     uint32_t       hours   = 0;
@@ -196,8 +182,9 @@ int processCreateCmd(struct stContext *context)
     time_t         curTime = time(NULL);
     const size_t   replySz = sizeof(uint16_t) + sizeof(uint64_t);
     uint8_t        replyBuf[replySz];
-    struct stTask *newTask = (struct stTask*) malloc(sizeof(struct stTask)); //create structure for new task
 
+    //create structure for new task
+    struct stTask *newTask = (struct stTask*) malloc(sizeof(struct stTask)); 
     if (!newTask){
         perror("memory allocation");
         retCode = EXIT_FAILURE;
@@ -268,9 +255,9 @@ int processCreateCmd(struct stContext *context)
         retCode = EXIT_FAILURE;
         goto lExit;
     }
-
     argc = be32toh(argc);
     newTask->argC = (size_t)argc;
+
     newTask->argV = (struct stString **)malloc(sizeof(struct stString *) * newTask->argC);
     if (!newTask->argV){
         perror("memory allocation");
@@ -278,7 +265,7 @@ int processCreateCmd(struct stContext *context)
         goto lExit;
     }
 
-    for (size_t i = 0; i < newTask->argC; i++) //real all command's arguments
+    for (size_t i = 0; i < newTask->argC; i++) //read all command's arguments
     {
         int strLen = 0;
         rezRead = read(context->pipeRequest, &strLen, sizeof(strLen));
@@ -299,7 +286,7 @@ int processCreateCmd(struct stContext *context)
             break;
         }
 
-        newTask->argV[i]->text[strLen] = 0;
+        newTask->argV[i]->text[strLen] = 0;         //string must be terminated by 0
     }
 
     if (retCode != EXIT_SUCCESS)
@@ -307,19 +294,17 @@ int processCreateCmd(struct stContext *context)
         goto lExit;
     }
 
+    //fill task ID
     newTask->taskId = ++context->lastTaskId;
+
+    //fill time of creation
     newTask->stCreated = *localtime(&curTime);
 
-    //https://linux.die.net/man/2/time
-    //time() returns the time as the number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). 
-    //So on POSIX system we can do math like that: 
-    //  https://linux.die.net/man/3/difftime
-    //  On a POSIX system, time_t is an arithmetic type, and one could just define
-    //  #define difftime(t1,t0) (double)(t1 - t0)
-    //  when the possible overflow in the subtraction is not a concern.     
-    curTime -= 59; //minus 59 seconds
     //set last execution time in the past, to let function maintainTasks as soon as possible regarding schedule
+    curTime -= 59; //minus 59 seconds    
     newTask->stExecuted = *localtime(&curTime);
+
+    //init pid of process by 0
     newTask->lastPid    = 0;
 
     *(uint16_t*)replyBuf = htobe16(SERVER_REPLY_OK);
@@ -339,7 +324,7 @@ lExit:
 
 int processRemoveCmd(struct stContext *context){
     int               ret     = EXIT_SUCCESS;
-    uint64_t          taskId  = 0x0;
+    uint64_t          taskId  = 0;
     ssize_t           rezRead = 0;
     struct element_t *taskEl  = context->tasks->first;
     struct stTask    *task    = NULL;
@@ -357,6 +342,7 @@ int processRemoveCmd(struct stContext *context){
     }
     taskId = be64toh(taskId);
 
+    //find required task 
     while ((taskEl) && (EXIT_SUCCESS == ret))
     {
         task = (struct stTask *)(taskEl->data);
@@ -369,20 +355,20 @@ int processRemoveCmd(struct stContext *context){
 
     if (taskEl)
     {
-        sprintf(txtBuf, "/tree/%lu/stdout", task->taskId);
+        sprintf(txtBuf, "/tasks/%lu/stdout", task->taskId);
         GET_DEFAULT_PATH(txtPath, txtBuf);
         remove(txtPath);
 
-        sprintf(txtBuf, "/tree/%lu/stderr", task->taskId);
+        sprintf(txtBuf, "/tasks/%lu/stderr", task->taskId);
         GET_DEFAULT_PATH(txtPath, txtBuf);
         remove(txtPath);
 
-        sprintf(txtBuf, "/tree/%lu", task->taskId);
+        sprintf(txtBuf, "/tasks/%lu", task->taskId);
         GET_DEFAULT_PATH(txtPath, txtBuf);
         rmdir(txtPath);
 
-        freeTask(task);
         removeEl(context->tasks, taskEl);
+        freeTask(task);
 
         *(uint16_t*)replyBuf = htobe16(SERVER_REPLY_OK);
         ret = writeReply(context, replyBuf, sizeof(uint16_t));
@@ -429,6 +415,8 @@ int maintainTasks(struct stContext *context){
     time_t            curTime   = time(NULL);
     struct tm         stCurTime = *localtime(&curTime);
     struct element_t *taskEl    = context->tasks->first;
+
+    //while is element in list && has not error
     while ((taskEl) && (EXIT_SUCCESS == ret))
     {
         struct stTask * task = (struct stTask *)(taskEl->data);
@@ -461,15 +449,14 @@ int maintainTasks(struct stContext *context){
             }
         }
 
-        //We have min granularity of 1minute.
-        //if since last execution more than 60 seconds passed. 
-        //and task is programmed to be executed during current time
-        if (    (0 == task->lastPid)
+        //We have min granularity of 1 minute.
+        //if last task is terminated && since last execution more than 60 seconds passed. 
+        //&& task is programmed to be executed in current time
+        if ((0 == task->lastPid)
              && (60.0 <= difftime(curTime, taskLastExecTime))
              && (task->daysOfWeek[stCurTime.tm_wday])
              && (task->hours[stCurTime.tm_hour])
-             && (task->minutes[stCurTime.tm_min])
-           ){
+             && (task->minutes[stCurTime.tm_min])){
                ret = execTask(context, task);
                if ( EXIT_SUCCESS == ret)
                {
@@ -482,7 +469,7 @@ int maintainTasks(struct stContext *context){
                     task->stExecuted = stCurTime;    
                }
         }
-
+        //check next task
         taskEl = taskEl->next;
     }
 
@@ -606,29 +593,31 @@ struct stString *createFilePath(const char *postfix){
 }
 
 
-int isDirExists(const char *path){
+int isDirExists(const char *path)
+{
     struct stat l_sStat;
     l_sStat.st_mode = 0;
-    if (0 == stat(path, &l_sStat)){
-        if (0 != (l_sStat.st_mode & S_IFDIR)){
+    if (0 == stat(path, &l_sStat))
+    {
+        if ((l_sStat.st_mode & S_IFDIR) != 0)
+        {
             return 1;
         }
-    }               
-
+    }   
     return 0;
 }
 
-int isFileExists(const char *path){
+int isFileExists(const char *path)
+{
     struct stat l_sStat;
     l_sStat.st_mode = 0;
-    if (0 == stat(path, &l_sStat)){
-        if (    (0 != (l_sStat.st_mode & S_IFREG))
-             || (0 != (l_sStat.st_mode & S_IFIFO))
-           ){
+    if (0 == stat(path, &l_sStat))
+    {
+        if ((0 != (l_sStat.st_mode & S_IFREG)) || (0 != (l_sStat.st_mode & S_IFIFO)))
+        {
             return 1;
         }
     }
-
     return 0;
 }
 
@@ -636,18 +625,21 @@ int isFileExists(const char *path){
 int writeReply(struct stContext *context, const uint8_t *buff, size_t size)
 {
     int ret = EXIT_SUCCESS;
-    if (!context || !buff){
+    if (!context || !buff)
+    {
         return EXIT_FAILURE;
     }    
 
     context->pipeReply = open(context->pipeRepName->text, O_WRONLY);   
-    if (context->pipeReply < 0){
+    if (context->pipeReply < 0)
+    {
         perror("open fifo is failed");
         ret = EXIT_FAILURE;
         goto lExit;
     }
 
-    if (write(context->pipeReply, buff, size) < (ssize_t)size) {
+    if (write(context->pipeReply, buff, size) < (ssize_t)size) 
+    {
         perror("write to pipe failure");
         ret = EXIT_FAILURE;
         goto lExit;
@@ -676,11 +668,11 @@ int execTask(struct stContext *context, struct stTask * task)
     for (size_t i = 0; i < task->argC; i++){
         argv[i] = task->argV[i]->text;
     }
-    argv[task->argC] = NULL;
+    argv[task->argC] = NULL;//for execvp
 
-    sprintf(txtBuf, "/tree/%lu/stdout", task->taskId);
+    sprintf(txtBuf, "/tasks/%lu/stdout", task->taskId);
     fileOut = createFilePath(txtBuf);
-    sprintf(txtBuf, "/tree/%lu/stderr", task->taskId);
+    sprintf(txtBuf, "/tasks/%lu/stderr", task->taskId);
     fileErr = createFilePath(txtBuf);
 
     task->stdOut = open(fileOut->text, 
@@ -690,26 +682,24 @@ int execTask(struct stContext *context, struct stTask * task)
                         O_CREAT | O_RDWR | O_TRUNC, 
                         S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR | S_IWGRP | S_IWOTH);
 
-    if (    (task->stdOut < 0)                    
-         || (task->stdErr < 0)                 
-       ){
+    if ((task->stdOut < 0) || (task->stdErr < 0)){
         perror("file open failed");
         ret = EXIT_FAILURE;
         goto lExit;
     }
 
     task->lastPid = fork();
-    if (-1 == task->lastPid) 
-    {
+    if (-1 == task->lastPid){
         perror("Fork failed");
         ret = EXIT_FAILURE;
         goto lExit;
     } 
-    else if (0 == task->lastPid) 
-    {
+    else if (0 == task->lastPid){
+        //children does not use the parent's pipes 
         CLOSE_FILE(context->pipeReply);
         CLOSE_FILE(context->pipeRequest);
 
+        //redirect stdin && stdout
         dup2(task->stdOut, STDOUT_FILENO);
         dup2(task->stdErr, STDERR_FILENO);
 
