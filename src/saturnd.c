@@ -235,8 +235,8 @@ int processListCmd(struct stContext *context){
             uint32_t lengthW = htobe32(task->argV[x]->len);
             uint8_t *dataWord = ((uint8_t *)task->argV[x]->text);//?
             memmove(commandLineBuf+sizeBuf, &lengthW, sizeof(uint32_t));
-            memmove(commandLineBuf+sizeBuf+ sizeof(uint32_t), &dataWord, strlen(dataWord));
-            sizeBuf+=sizeof(uint32_t)+strlen(dataWord);
+            memmove(commandLineBuf+sizeBuf+ sizeof(uint32_t), &dataWord, strlen((char *)dataWord));
+            sizeBuf+=sizeof(uint32_t)+strlen((char *)dataWord);
         }
 
         //Position
@@ -479,10 +479,76 @@ lExit:
 }
 
 int processTimesExitCodesCmd(struct stContext *context){
-    int ret = EXIT_SUCCESS;
+    int exit_value = EXIT_SUCCESS;
 
+    uint64_t taskIdRq = 0;
 
-    return ret;
+    size_t rezRead = read(context->pipeRequest, &taskIdRq, sizeof(uint64_t));
+    if (rezRead < sizeof(uint64_t)){
+        perror("read minutes");
+        exit_value = EXIT_FAILURE;
+        goto lExit;
+    }
+    taskIdRq = be64toh(taskIdRq);
+
+    struct element_t *e;
+    struct stTask *task;
+    for (e=context->tasks->first; e!=NULL; e=e->next) {
+        task = (struct stTask *) (e->data);
+        if (task->taskId==taskIdRq)goto lExit;
+    }
+    exit_value=EXIT_FAILURE;
+
+    lExit:
+        if (exit_value==EXIT_FAILURE){
+
+            //Err
+            char buf[sizeof(uint16_t)+ sizeof(uint16_t)];
+            uint16_t Retype = SERVER_REPLY_ERROR;
+            uint16_t Errcode = SERVER_REPLY_ERROR_NOT_FOUND;
+            memmove(buf, &Retype, sizeof(uint16_t));
+            memmove(buf+ sizeof(uint16_t), &Errcode, sizeof(uint16_t));
+
+            writeReply(context, (uint8_t *)buf, sizeof(uint16_t)+ sizeof(uint16_t));
+
+        }else{
+
+            //Header
+            int acc=sizeof(uint16_t)+ sizeof(uint32_t);
+            char *buf= malloc(acc);
+            uint16_t Retype = htobe16(SERVER_REPLY_OK);
+            uint32_t nbRuns = htobe32(task->runs->count);
+            memmove(buf, &Retype, sizeof(uint16_t));
+            memmove(buf+ sizeof(uint16_t), &nbRuns, sizeof(uint32_t));
+
+            //Runs
+            struct stRunStat *s;
+            for (e=task->runs->first; e; e=e->next){
+                s=(struct stRunStat *) (e->data);
+
+                //Time
+                uint64_t time = htobe64(mktime(&s->stTime));
+
+                //Code
+                uint16_t code = htobe16((s->code==0)?0xFFFF:s->code==0);
+
+                acc+= sizeof(uint16_t)+ sizeof(uint64_t);
+                buf=realloc(buf, acc);
+                if (buf==NULL){
+                    perror("Fail realloc");
+                    return EXIT_FAILURE;
+                }
+
+                int currDep = acc-(sizeof(uint64_t)+sizeof(uint16_t));
+                memmove(buf+ currDep, &time, sizeof(uint64_t));
+                memmove(buf+ currDep+ sizeof(uint64_t), &code, sizeof(uint16_t));
+            }
+
+            //Response
+            writeReply(context, (uint8_t *)buf, acc);
+            free(buf);
+        }
+        return exit_value;
 }
 
 int processTerminate(struct stContext *context)
