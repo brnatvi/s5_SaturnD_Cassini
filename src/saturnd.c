@@ -185,18 +185,17 @@ int processListCmd(struct stContext *context){
 
     //Header
     uint16_t opCode = htobe16(SERVER_REPLY_OK);
-    uint64_t nbTask = htobe64(context->tasks->count);
-    char *buf= malloc(sizeof(uint16_t)+ sizeof(uint64_t));
+    uint32_t nbTask = htobe32(context->tasks->count);
+    //Position
+    int acc=sizeof(uint16_t)+ sizeof(uint32_t);
+    char *buf= malloc(acc);
     if (buf == NULL){
         perror("Error realloc");
         exit_value= EXIT_FAILURE;
         goto lExit;
     }
     memmove(buf, &opCode, sizeof(uint16_t));
-    memmove(buf+ sizeof(uint16_t), &nbTask, sizeof(uint64_t));
-
-    //Position
-    int acc=sizeof(uint16_t)+ sizeof(uint64_t);
+    memmove(buf+ sizeof(uint16_t), &nbTask, sizeof(uint32_t));
 
     //if 0 Task
     if (context->tasks->count == 0){
@@ -211,22 +210,41 @@ int processListCmd(struct stContext *context){
 
         //ID
         uint64_t idTask = htobe64(task->taskId);
+        //Conversion
+        char daysConv[9];
+        memset(daysConv, '0', 8);
+        int pos=7;
+        for (int i = 0; i < 7; i++) {
+            if ((task->daysOfWeek)[i] =='1')daysConv[pos-i]='1';
+        }
+        daysConv[8]='\0';
         //Timing
         uint64_t minutes = htobe64(((uint64_t) atoi((char *)task->minutes)));
         uint32_t hours = htobe32(((uint32_t) atoi((char *)task->hours)));
-        uint8_t days = ((uint8_t) atoi((char *)task->daysOfWeek));
+        uint8_t days = ((uint8_t) atoi(daysConv));
         //Task
-        char bufTask[sizeof(uint64_t)+sizeof(uint64_t)+sizeof(uint32_t)+ sizeof(uint8_t)];
-        memmove(bufTask, &idTask, sizeof(uint64_t));
-        memmove(bufTask+ sizeof(uint64_t), &minutes, sizeof(uint64_t));
-        memmove(bufTask+ sizeof(uint64_t)+ sizeof(uint64_t), &hours, sizeof(uint32_t));
-        memmove(bufTask+ sizeof(uint64_t)+ sizeof(uint64_t)+ sizeof(uint32_t), &days, sizeof(uint8_t));
+        char bufTaskIDTiming[sizeof(uint64_t)+sizeof(uint64_t)+sizeof(uint32_t)+ sizeof(uint8_t)];
+        memmove(bufTaskIDTiming, &idTask, sizeof(uint64_t));
+        memmove(bufTaskIDTiming+ sizeof(uint64_t), &minutes, sizeof(uint64_t));
+        memmove(bufTaskIDTiming+ sizeof(uint64_t)+ sizeof(uint64_t), &hours, sizeof(uint32_t));
+        memmove(bufTaskIDTiming+ sizeof(uint64_t)+ sizeof(uint64_t)+ sizeof(uint32_t), &days, sizeof(uint8_t));
 
         //Command Line
-        int sizeBuf=0;
-        char *commandLineBuf = malloc(0);
+        int sizeBuf= sizeof(uint32_t);
+        char *commandLineBuf = malloc(sizeBuf);
+        if (commandLineBuf==NULL){
+            perror("fail malloc");
+            exit_value=EXIT_FAILURE;
+        }
+        uint32_t nbrArg = task->argC;
+        memmove(commandLineBuf, &nbrArg, sizeof(uint32_t));
+
+        //ARGV
         for (size_t x = 0; x < task->argC; x++){
-            commandLineBuf = realloc(commandLineBuf, sizeBuf + sizeof(uint32_t) + task->argV[x]->len);
+
+            sizeBuf+=sizeof(uint32_t) + task->argV[x]->len;//???
+
+            commandLineBuf = realloc(commandLineBuf, sizeBuf);
             if (commandLineBuf == NULL){
                 perror("Error realloc");
                 exit_value= EXIT_FAILURE;
@@ -234,9 +252,9 @@ int processListCmd(struct stContext *context){
             }
             uint32_t lengthW = htobe32(task->argV[x]->len);
             char *dataWord = (task->argV[x]->text);
-            memmove(commandLineBuf+sizeBuf, &lengthW, sizeof(uint32_t));
-            memmove(commandLineBuf+sizeBuf+ sizeof(uint32_t), (uint8_t *)dataWord, strlen(dataWord));
-            sizeBuf+=sizeof(uint32_t)+strlen((char *)dataWord);
+
+            memmove(commandLineBuf+sizeBuf-sizeof(uint32_t)-task->argV[x]->len, &lengthW, sizeof(uint32_t));
+            memmove(commandLineBuf+sizeBuf-task->argV[x]->len, (uint8_t *)dataWord, task->argV[x]->len);
         }
 
         //Position
@@ -250,14 +268,23 @@ int processListCmd(struct stContext *context){
         }
 
         //Add Task I
-        int bonDec = acc-(sizeof(uint64_t)+sizeof(uint64_t)+sizeof(uint32_t)+ sizeof(uint8_t)+sizeBuf);
-        memmove(buf+ bonDec, bufTask, sizeof(uint64_t)+sizeof(uint64_t)+sizeof(uint32_t)+ sizeof(uint8_t));
+        int bonDec =
+                acc
+                -(sizeof(uint64_t)+ sizeof(uint64_t)+ sizeof(uint32_t)+ sizeof(uint8_t)+sizeBuf)
+                ;
+
+        memmove(buf+ bonDec, bufTaskIDTiming, sizeof(uint64_t)+sizeof(uint64_t)+sizeof(uint32_t)+ sizeof(uint8_t));
         memmove(buf+ bonDec + sizeof(uint64_t)+sizeof(uint64_t)+sizeof(uint32_t)+ sizeof(uint8_t), commandLineBuf, sizeBuf);
         free(commandLineBuf);
     }
 
     lExit:
         if (EXIT_SUCCESS == exit_value){
+
+            /*int fd = open("LoGl", O_CREAT|O_WRONLY|O_TRUNC, 0666);
+            write(fd, buf, acc);
+            close(fd);*/
+
             writeReply(context, (uint8_t*)buf, acc);
         }
         free(buf);
@@ -479,10 +506,11 @@ lExit:
 }
 
 int processTimesExitCodesCmd(struct stContext *context){
-    int exit_value = EXIT_SUCCESS;
 
     uint64_t taskIdRq = 0;
+    int exit_value = EXIT_SUCCESS;
 
+    //TaskId
     size_t rezRead = read(context->pipeRequest, &taskIdRq, sizeof(uint64_t));
     if (rezRead < sizeof(uint64_t)){
         perror("read minutes");
@@ -491,31 +519,23 @@ int processTimesExitCodesCmd(struct stContext *context){
     }
     taskIdRq = be64toh(taskIdRq);
 
+    //fetch task with id
     struct element_t *e;
     struct stTask *task;
     for (e=context->tasks->first; e!=NULL; e=e->next) {
         task = (struct stTask *) (e->data);
-        if (task->taskId==taskIdRq)goto lExit;
-    }
-    exit_value=EXIT_FAILURE;
 
-    lExit:
-        if (exit_value==EXIT_FAILURE){
-
-            //Err
-            char buf[sizeof(uint16_t)+ sizeof(uint16_t)];
-            uint16_t Retype = SERVER_REPLY_ERROR;
-            uint16_t Errcode = SERVER_REPLY_ERROR_NOT_FOUND;
-            memmove(buf, &Retype, sizeof(uint16_t));
-            memmove(buf+ sizeof(uint16_t), &Errcode, sizeof(uint16_t));
-
-            writeReply(context, (uint8_t *)buf, sizeof(uint16_t)+ sizeof(uint16_t));
-
-        }else{
+        //Task found
+        if (task->taskId==taskIdRq){
 
             //Header
             int acc=sizeof(uint16_t)+ sizeof(uint32_t);
             char *buf= malloc(acc);
+            if (buf==NULL){
+                perror("Fail malloc");
+                exit_value=EXIT_FAILURE;
+                goto lExit;
+            }
             uint16_t Retype = htobe16(SERVER_REPLY_OK);
             uint32_t nbRuns = htobe32(task->runs->count);
             memmove(buf, &Retype, sizeof(uint16_t));
@@ -530,13 +550,14 @@ int processTimesExitCodesCmd(struct stContext *context){
                 uint64_t time = htobe64(mktime(&s->stTime));
 
                 //Code
-                uint16_t code = htobe16((s->code==0)?0xFFFF:s->code==0);
+                uint16_t code = htobe16((s->code==0)?0xFFFF:s->code);
 
                 acc+= sizeof(uint16_t)+ sizeof(uint64_t);
                 buf=realloc(buf, acc);
                 if (buf==NULL){
                     perror("Fail realloc");
-                    return EXIT_FAILURE;
+                    exit_value=EXIT_FAILURE;
+                    goto lExit;
                 }
 
                 int currDep = acc-(sizeof(uint64_t)+sizeof(uint16_t));
@@ -547,7 +568,23 @@ int processTimesExitCodesCmd(struct stContext *context){
             //Response
             writeReply(context, (uint8_t *)buf, acc);
             free(buf);
+
+            goto lExit;
         }
+
+    }
+
+    //NotFound
+    char buf[sizeof(uint16_t)+ sizeof(uint16_t)];
+    uint16_t Retype = SERVER_REPLY_ERROR;
+    uint16_t Errcode = SERVER_REPLY_ERROR_NOT_FOUND;
+    memmove(buf, &Retype, sizeof(uint16_t));
+    memmove(buf+ sizeof(uint16_t), &Errcode, sizeof(uint16_t));
+
+    //Response
+    writeReply(context, (uint8_t *)buf, sizeof(uint16_t)+ sizeof(uint16_t));
+
+    lExit:
         return exit_value;
 }
 
