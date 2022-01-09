@@ -561,13 +561,25 @@ int rq_stdout_stderr(char* request, char* reply, uint64_t taskid, uint16_t opera
                     else {
                         uint32_t length = *(uint32_t *)buffReply;
                         length = be32toh(length);
-                        uint8_t buffer[length + 1];  //malloc data, if bigger than 64k - allocate 64k 
-                        ssize_t readString = read(pipe_rep, buffer, length); //TODO: read by blocks and print by blocks
-                        buffer[length] = '\0';
-                        if (readString != length)
-                            perror("read from pipe-reply failure");
-                        else
-                            printf("%s", buffer);
+                        const size_t buffSz = 4096;
+                        uint8_t buffer[buffSz + 1]; 
+                        while (length)
+                        {
+                            size_t toRead = ((buffSz < (size_t)length) ? buffSz : (size_t)length);
+                            ssize_t readString = read(pipe_rep, buffer, toRead); 
+                            buffer[toRead] = '\0';
+
+                            if (readString != toRead){
+                                perror("read from pipe-reply failure");
+                                retCode = EXIT_FAILURE;
+                                break;
+                            }
+                            else{
+                                printf("%s", buffer);
+                            }
+
+                            length -= toRead;
+                        }
                     }
                     break;  // correct response
                 }

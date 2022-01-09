@@ -25,6 +25,9 @@
 #include "pipes-path.h"
 #include "common-utils.h"
 
+#define TASK_STD_OUT_NAME "stdout"
+#define TASK_STD_ERR_NAME "stderr"
+
 struct stString
 {
     char  *text;
@@ -76,6 +79,7 @@ int processTerminate(struct stContext *context);        //done
 int processStdOutCmd(struct stContext *context);
 int processStdErrCmd(struct stContext *context);
 int maintainTasks(struct stContext *context);           //done
+int sendFileContent(struct stContext *context, const char *fileName);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                               auxillary functions

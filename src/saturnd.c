@@ -401,12 +401,12 @@ int processTerminate(struct stContext *context)
 
 int processStdOutCmd(struct stContext *context)
 {
-    return EXIT_SUCCESS;
+    return sendFileContent(context, TASK_STD_OUT_NAME);
 }
 
 int processStdErrCmd(struct stContext *context)
 {
-    return EXIT_SUCCESS;
+    return sendFileContent(context, TASK_STD_ERR_NAME);
 }
 
 
@@ -719,6 +719,131 @@ lExit:
         CLOSE_FILE(task->stdOut);
         CLOSE_FILE(task->stdErr);
     }
+
+    return ret;
+}
+
+
+int sendFileContent(struct stContext *context, const char *fileName)
+{
+    int               ret     = EXIT_SUCCESS;
+    uint64_t          taskId  = 0;
+    ssize_t           rezRead = 0;
+    struct element_t *taskEl  = context->tasks->first;
+    struct stTask    *task    = NULL;
+    const size_t      replySize = 4096;
+    uint8_t           replyBuf[replySize];
+    int               fileFD   = -1;
+    uint32_t          bufSize   = 0;
+    uint32_t          fileSize  = 0;
+    char              txtBuf[256];
+    char              filePath[4096];
+    struct pollfd     fds[1];
+
+    // read task ID
+    rezRead = read(context->pipeRequest, &taskId, sizeof(taskId));
+    if (rezRead < sizeof(taskId)){
+        perror("read task ID");
+        ret = EXIT_FAILURE;
+        goto lExit;
+    }
+    taskId = be64toh(taskId);
+
+    context->pipeReply = open(context->pipeRepName->text, O_WRONLY);   
+    if (context->pipeReply < 0){
+        perror("open pipe is failed");
+        ret = EXIT_FAILURE;
+        goto lExit;
+    }
+
+    //find required task 
+    while ((taskEl) && (EXIT_SUCCESS == ret)){
+        task = (struct stTask *)(taskEl->data);
+        if (task->taskId == taskId){
+            break;
+        }
+        taskEl = taskEl->next;
+    }
+
+    //if task not found
+    if (!taskEl){
+        // Pattern of answer  REPTYPE='ER' <uint16>, ERRCODE <uint16>
+        *(uint16_t*)replyBuf = htobe16(SERVER_REPLY_ERROR);
+        *(uint16_t*)(replyBuf + sizeof(uint16_t)) = htobe16(SERVER_REPLY_ERROR_NOT_FOUND);
+        bufSize = 2 * sizeof(uint16_t);
+
+        if (write(context->pipeReply, replyBuf, bufSize) < (ssize_t)bufSize){
+            perror("write to pipe failure");
+            ret = EXIT_FAILURE;
+        }
+        goto lExit;
+    }
+
+    // create absolut path
+    sprintf(txtBuf, "/tasks/%lu/%s", task->taskId, fileName);
+    GET_DEFAULT_PATH(filePath, txtBuf);
+
+    // open file
+    fileFD = open(filePath, O_RDONLY);
+    if (fileFD < 0){
+        // Pattern of answer  REPTYPE='ER' <uint16>, ERRCODE <uint16>
+        *(uint16_t*)replyBuf = htobe16(SERVER_REPLY_ERROR);
+        *(uint16_t*)(replyBuf + sizeof(uint16_t)) = htobe16(SERVER_REPLY_ERROR_NEVER_RUN);
+        bufSize = sizeof(uint16_t) + sizeof(uint16_t);
+
+        if (write(context->pipeReply, replyBuf, bufSize) < (ssize_t)bufSize){
+            perror("write to pipe failure");
+            ret = EXIT_FAILURE;
+        }
+        goto lExit;
+    }
+
+    // Pattern of answer REPTYPE='OK' <uint16>, OUTPUT <string>   
+    //find size of file & jump to beginning
+    fileSize = lseek(fileFD, 0, SEEK_END);   
+    lseek(fileFD, 0, SEEK_SET);
+
+    *(uint16_t*)replyBuf = htobe16(SERVER_REPLY_OK);
+    *(uint32_t*)(replyBuf + sizeof(uint16_t)) = htobe32((uint32_t)fileSize);
+    bufSize = sizeof(uint16_t) + sizeof(uint32_t);
+    if (write(context->pipeReply, replyBuf, bufSize) < (ssize_t)bufSize){
+        perror("write to pipe failure");
+        ret = EXIT_FAILURE;
+    }
+
+    fds[0].fd      = context->pipeReply;
+    fds[0].events  = POLLOUT;
+    fds[0].revents = 0;    
+
+    while (fileSize)
+    {
+        int pollRet = poll(fds, 1, 5000); //5 seconds to wait 
+        if (pollRet > 0)
+        {
+            bufSize = (((uint32_t)replySize < fileSize) ? (uint32_t)replySize : fileSize);
+            if (bufSize != read(fileFD, replyBuf, bufSize)){
+                perror("file read error!");
+                ret = EXIT_FAILURE;
+                break;
+            }
+
+            if (write(context->pipeReply, replyBuf, bufSize) < (ssize_t)bufSize){
+                perror("write to pipe failure");
+                ret = EXIT_FAILURE;
+            }
+
+            fileSize -= bufSize;
+        }
+        else{
+            perror("Pipe write timeout or error");
+            ret = EXIT_FAILURE;
+            break;
+        }
+    }
+
+lExit:
+    CLOSE_FILE(context->pipeReply);
+    CLOSE_FILE(fileFD);
 
     return ret;
 }
