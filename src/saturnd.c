@@ -233,9 +233,9 @@ int processListCmd(struct stContext *context){
                 goto lExit;
             }
             uint32_t lengthW = htobe32(task->argV[x]->len);
-            uint8_t *dataWord = ((uint8_t *)task->argV[x]->text);//?
+            char *dataWord = (task->argV[x]->text);
             memmove(commandLineBuf+sizeBuf, &lengthW, sizeof(uint32_t));
-            memmove(commandLineBuf+sizeBuf+ sizeof(uint32_t), &dataWord, strlen((char *)dataWord));
+            memmove(commandLineBuf+sizeBuf+ sizeof(uint32_t), (uint8_t *)dataWord, strlen(dataWord));
             sizeBuf+=sizeof(uint32_t)+strlen((char *)dataWord);
         }
 
