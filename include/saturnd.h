@@ -45,8 +45,11 @@ struct stTask
     unsigned char          minutes[60];    //array representing all minutes of 1h, for example [0, 0, 1, 1, 0, 0 ... ] => minutes 3,4 are active, all others are inactive
     unsigned char          hours[24];      //array representing all hours of a day, for example [0, 1, 0, 1, 0, 0 ... ] => hours 2,4 are active, all others are inactive
     unsigned char          daysOfWeek[7];  //array representing all days of a week, for example [1, 1, 0, 1, 0, 0, 0] => Sunday, Monday, Wednesday are active, all others are inactive
+    uint64_t               min;
+    uint16_t               heu;
+    uint8_t                day;
     size_t                 argC;
-    struct stString      **argV;     
+    struct stString      **argV;
     int                    stdOut;
     int                    stdErr;
     struct tm              stCreated;

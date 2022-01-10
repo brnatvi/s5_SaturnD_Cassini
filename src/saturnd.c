@@ -210,18 +210,10 @@ int processListCmd(struct stContext *context){
 
         //ID
         uint64_t idTask = htobe64(task->taskId);
-        //Conversion
-        char daysConv[9];
-        memset(daysConv, '0', 8);
-        int pos=7;
-        for (int i = 0; i < 7; i++) {
-            if ((task->daysOfWeek)[i] =='1')daysConv[pos-i]='1';
-        }
-        daysConv[8]='\0';
         //Timing
-        uint64_t minutes = htobe64(((uint64_t) atoi((char *)task->minutes)));
-        uint32_t hours = htobe32(((uint32_t) atoi((char *)task->hours)));
-        uint8_t days = ((uint8_t) atoi(daysConv));
+        uint64_t minutes = htobe64(task->min);
+        uint32_t hours = htobe32(task->heu);
+        uint8_t days = task->day;
         //Task
         char bufTaskIDTiming[sizeof(uint64_t)+sizeof(uint64_t)+sizeof(uint32_t)+ sizeof(uint8_t)];
         memmove(bufTaskIDTiming, &idTask, sizeof(uint64_t));
@@ -236,13 +228,13 @@ int processListCmd(struct stContext *context){
             perror("fail malloc");
             exit_value=EXIT_FAILURE;
         }
-        uint32_t nbrArg = task->argC;
+        uint32_t nbrArg = htobe32(task->argC);
         memmove(commandLineBuf, &nbrArg, sizeof(uint32_t));
 
         //ARGV
         for (size_t x = 0; x < task->argC; x++){
 
-            sizeBuf+=sizeof(uint32_t) + task->argV[x]->len;//???
+            sizeBuf+=sizeof(uint32_t) + task->argV[x]->len;
 
             commandLineBuf = realloc(commandLineBuf, sizeBuf);
             if (commandLineBuf == NULL){
@@ -280,11 +272,6 @@ int processListCmd(struct stContext *context){
 
     lExit:
         if (EXIT_SUCCESS == exit_value){
-
-            /*int fd = open("LoGl", O_CREAT|O_WRONLY|O_TRUNC, 0666);
-            write(fd, buf, acc);
-            close(fd);*/
-
             writeReply(context, (uint8_t*)buf, acc);
         }
         free(buf);
@@ -344,6 +331,7 @@ int processCreateCmd(struct stContext *context){
     }
 
     // fill newTask daysOfWeek, hours, minutes 
+    newTask->day=days;
     for (int i = 0; i < 7; i++){
         if (days & (1 << i)) {
             newTask->daysOfWeek[i] = 1;
@@ -352,6 +340,7 @@ int processCreateCmd(struct stContext *context){
         }
     }
 
+    newTask->heu=hours;
     for (int i = 0; i < 24; i++){
         if (hours & (1 << i)){
             newTask->hours[i] = 1;
@@ -360,6 +349,7 @@ int processCreateCmd(struct stContext *context){
         }
     }
 
+    newTask->min=min;
     for (int i = 0; i < 60; i++) {
         if (min & (1 << i)) {
             newTask->minutes[i] = 1;
