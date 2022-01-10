@@ -303,21 +303,22 @@ int saveTasksToHdd(struct stContext *context){
             //on sauvegarde min heu et day
             int fd_time = open(concat(repname,"/timing_uint.txt"), O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
             int nb=sizeof (uint64_t)+sizeof (uint16_t)+sizeof (uint8_t);
-            char *buffTask = malloc(nb);
-            char *ptr = buffTask;
+            char *buffTime = malloc(nb);
+            char *ptr_time = buffTask;
             if (!buffTask) {
                 perror("can't allocate memory");
                 return EXIT_FAILURE;
             }
-            sprintf(ptr, "%" PRIu64,task->min);
-            ptr+=sizeof (uint64_t);
-            sprintf(ptr, "%" PRIu16,task->heu);
-            ptr+=sizeof (uint16_t);
-            sprintf(ptr, "%" PRIu8,task->day);
-            if(write(fd_time,buffTask,nb)!=nb){
+            sprintf(ptr_time, "%" PRIu64,task->min);
+            ptr_time+=sizeof (uint64_t);
+            sprintf(ptr_time, "%" PRIu16,task->heu);
+            ptr_time+=sizeof (uint16_t);
+            sprintf(ptr_time, "%" PRIu8,task->day);
+            if(write(fd_time,buffTime,nb)!=nb){
                 perror("Failed to write time uint");
                 return EXIT_FAILURE;
             }
+            free(buffTime);
             close(fd_time);
 
             // on crée le répertoire de la tache
@@ -380,7 +381,7 @@ int saveTasksToHdd(struct stContext *context){
 
             if(strlen(stCreatedTab)!=write(fd4,stCreatedTab,strlen(stCreatedTab))){
                 perror("failed to write stCreated");
-                return EXIT_FAILURE
+                return EXIT_FAILURE;
             }
             close(fd4);
             //sauvegarde de task->stExecuted
@@ -390,7 +391,7 @@ int saveTasksToHdd(struct stContext *context){
             int fd5 = open(concat(repname,"/tmexec.txt"),O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
             if(strlen(stExecutedTab)!=write(fd5,stExecutedTab,strlen(stExecutedTab))){
                 perror("failed to write stExecuted");
-                return EXIT_FAILURE
+                return EXIT_FAILURE;
             }
             close(fd5);
             //sauvegarde de task->lastPid
