@@ -300,8 +300,30 @@ int saveTasksToHdd(struct stContext *context){
                 return EXIT_FAILURE;
             }
             close(fd);
+            //on sauvegarde min heu et day
+            int fd_time = open(concat(repname,"/timing_uint.txt"), O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
+            int nb=sizeof (uint64_t)+sizeof (uint16_t)+sizeof (uint8_t);
+            char *buffTask = malloc(nb);
+            char *ptr = buffTask;
+            if (!buffTask) {
+                perror("can't allocate memory");
+                return EXIT_FAILURE;
+            }
+            sprintf(ptr, "%" PRIu64,task->min);
+            ptr+=sizeof (uint64_t);
+            sprintf(ptr, "%" PRIu16,task->heu);
+            ptr+=sizeof (uint16_t);
+            sprintf(ptr, "%" PRIu8,task->day);
+            if(write(fd_time,buffTask,nb)!=nb){
+                perror("Failed to write time uint");
+                return EXIT_FAILURE;
+            }
+            close(fd_time);
 
-            //on sauvergarde ARGC et ARGV
+            // on crée le répertoire de la tache
+
+            free(buffTask);
+            //on sauvegarde ARGC et ARGV
 
             int buffer_size=0;
             for(int i = 0; i< task->argC; i++){
