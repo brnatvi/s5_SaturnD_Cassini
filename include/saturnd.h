@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <endian.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <time.h>
 #include <timing-text-io.h>
 #include <cassini.h>
@@ -17,6 +18,7 @@
 #include <timing.h>
 #include <poll.h>
 #include <sys/wait.h>
+#include <dirent.h>
 
 #include "listd.h"
 
@@ -52,7 +54,7 @@ struct stTask
     uint16_t               heu;
     uint8_t                day;
     size_t                 argC;
-    struct stString      **argV;
+    struct stString      **argV;     
     int                    stdOut;
     int                    stdErr;
     struct tm              stCreated;
@@ -101,5 +103,6 @@ int              isFileExists(const char *path);
 int              writeReply(struct stContext *context, const uint8_t *buff, size_t size);
 int              execTask(struct stContext *context, struct stTask * task);
 
+char* concat(char* a,char* b);
 
 #endif //SATURND_H
