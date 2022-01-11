@@ -30,7 +30,7 @@
 
 #define TASK_STD_OUT_NAME "stdout"
 #define TASK_STD_ERR_NAME "stderr"
-
+#define TASKS_FILE        "tasks.bin"
 struct stString
 {
     char  *text;
