@@ -1090,13 +1090,6 @@ lExit:
     return ret;
 }
 
-char* concat(char* a,char* b){
-    char *buffer = malloc(strlen(a)+strlen(b)+1);
-    strcpy(buffer,a);
-    strcat(buffer,b);
-    return buffer;
-}
-
 
 int execTask(struct stContext *context, struct stTask * task)
 {

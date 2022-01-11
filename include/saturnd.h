@@ -103,9 +103,6 @@ int              isFileExists(const char *path);
 int              writeReply(struct stContext *context, const uint8_t *buff, size_t size);
 int              execTask(struct stContext *context, struct stTask * task);
 
-
-char* concat(char* a,char* b);
-
 int              procError(const char *msg);
 int              procInfo(const char *msg);
 int              closeDeamonLog();
