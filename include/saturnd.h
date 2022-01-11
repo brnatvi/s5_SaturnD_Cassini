@@ -51,7 +51,7 @@ struct stTask
     unsigned char          hours[24];      //array representing all hours of a day, for example [0, 1, 0, 1, 0, 0 ... ] => hours 2,4 are active, all others are inactive
     unsigned char          daysOfWeek[7];  //array representing all days of a week, for example [1, 1, 0, 1, 0, 0, 0] => Sunday, Monday, Wednesday are active, all others are inactive
     uint64_t               min;
-    uint16_t               heu;
+    uint32_t               heu;
     uint8_t                day;
     size_t                 argC;
     struct stString      **argV;     
@@ -77,13 +77,13 @@ struct stContext
 
 int restoreTasksFromHdd(struct stContext *context);
 int saveTasksToHdd(struct stContext *context);
-int processListCmd(struct stContext *context);
+int processListCmd(struct stContext *context);          //done
 int processCreateCmd(struct stContext *context);        //done
 int processRemoveCmd(struct stContext *context);        //done
-int processTimesExitCodesCmd(struct stContext *context);
+int processTimesExitCodesCmd(struct stContext *context);//done
 int processTerminate(struct stContext *context);        //done
-int processStdOutCmd(struct stContext *context);
-int processStdErrCmd(struct stContext *context);
+int processStdOutCmd(struct stContext *context);        //done
+int processStdErrCmd(struct stContext *context);        //done 
 int maintainTasks(struct stContext *context);           //done
 int sendFileContent(struct stContext *context, const char *fileName);
 
@@ -103,6 +103,12 @@ int              isFileExists(const char *path);
 int              writeReply(struct stContext *context, const uint8_t *buff, size_t size);
 int              execTask(struct stContext *context, struct stTask * task);
 
+
 char* concat(char* a,char* b);
+
+int              procError(const char *msg);
+int              procInfo(const char *msg);
+int              closeDeamonLog();
+
 
 #endif //SATURND_H
