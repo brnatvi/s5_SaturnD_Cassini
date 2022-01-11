@@ -236,7 +236,7 @@ int saveTasksToHdd(struct stContext *context){
         //retirer les taches qu'on a remove
         while(current = readdir(saturnd)){
             if(current->d_type == DT_DIR && strcmp(current->d_name,"pipes")!=0
-               && strcmp(current->d_name,".")!=0 && strcmp(current->d_name,"..")!=0 ){
+               && strcmp(current->d_name,".")!=0 && strcmp(current->d_name,"..")!=0){
 
                 int bool = 1;
                 struct element_t *e;
@@ -256,9 +256,15 @@ int saveTasksToHdd(struct stContext *context){
                 if(bool!=0){
                     //remove directory
                     char *directory =concat(saturndPath,concat("/",current->d_name));
-                    if(remove(concat(concat(directory,"/"),"timing.txt"))!=0 &&
-                    remove(concat(concat(directory,"/"),"args.txt"))!=0){
-                        perror("Failed to remove taskfile");
+                    if(remove(concat(directory,"/timing.txt"))!=0 &&
+                    remove(concat(directory,"/args.txt"))!=0 &&
+                    remove(concat(directory,"/timing_uint.txt"))!=0 &&
+                    remove(concat(directory,"/std.txt"))!=0 &&
+                    remove(concat(directory,"/tmcreate.txt"))!=0 &&
+                    remove(concat(directory,"/tmexecuted.txt"))!=0 &&
+                    remove(concat(directory,"/pid.txt"))!=0 &&
+                    remove(concat(directory,"/runs.txt"))!=0 ){
+                        perror("Failed to remove taskfiles");
                         return EXIT_FAILURE;
                     }
                     if(rmdir(directory)!=0){
@@ -286,216 +292,224 @@ int saveTasksToHdd(struct stContext *context){
             sprintf(buffTask, "%" PRIu64,task->taskId);
             // on crée le répertoire de la tache
             char *repname = concat(concat(saturndPath,"/"),buffTask);
-            free(buffTask);
-            mkdir(repname,S_IRWXU);
+            if(mkdir(repname,S_IRWXU)==0) {
 
-            // on crée le fichier qui sauvergarde les arrays minutes,hours et daysOfWeek
-            unsigned char *timing = malloc(sizeof (unsigned  char)*91);
-            unsigned char *bufTimingIter = (unsigned char *)timing;
-            int fd = open(concat(repname,"/timing.txt"), O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
-            memcpy(bufTimingIter,task->minutes,sizeof (unsigned char)*60);
-            bufTimingIter +=sizeof (unsigned char)*60;
+                // on crée le fichier qui sauvergarde les arrays minutes,hours et daysOfWeek
+                unsigned char *timing = malloc(sizeof(unsigned char) * 91);
+                unsigned char *bufTimingIter = (unsigned char *) timing;
+                int fd = open(concat(repname, "/timing.txt"), O_WRONLY | O_TRUNC | O_CREAT, S_IRWXU);
+                memcpy(bufTimingIter, task->minutes, sizeof(unsigned char) * 60);
+                bufTimingIter += sizeof(unsigned char) * 60;
 
-            memcpy(bufTimingIter,task->hours,sizeof (unsigned char)*24);
-            bufTimingIter +=sizeof (unsigned char)*24;
+                memcpy(bufTimingIter, task->hours, sizeof(unsigned char) * 24);
+                bufTimingIter += sizeof(unsigned char) * 24;
 
-            memcpy(bufTimingIter,task->daysOfWeek,sizeof (unsigned char)*7);
-            if(91!=(write(fd,timing,sizeof(unsigned char)*91))){
-                perror("Failed to save timing to file");
-                return EXIT_FAILURE;
-            }
-            close(fd);
-            //on sauvegarde min heu et day
-            int fd_time = open(concat(repname,"/timing_uint.txt"), O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
-            int nb=sizeof (uint64_t)+sizeof (uint16_t)+sizeof (uint8_t);
-            char *buffTime = malloc(nb);
-            char *ptr_time = buffTask;
-            if (!buffTask) {
-                perror("can't allocate memory");
-                return EXIT_FAILURE;
-            }
-            sprintf(ptr_time, "%" PRIu64,task->min);
-            ptr_time+=sizeof (uint64_t);
-            sprintf(ptr_time, "%" PRIu16,task->heu);
-            ptr_time+=sizeof (uint16_t);
-            sprintf(ptr_time, "%" PRIu8,task->day);
-            if(write(fd_time,buffTime,nb)!=nb){
-                perror("Failed to write time uint");
-                return EXIT_FAILURE;
-            }
-            free(buffTime);
-            close(fd_time);
-
-            // on crée le répertoire de la tache
-
-            free(buffTask);
-            //on sauvegarde ARGC et ARGV
-
-            int buffer_size=0;
-            for(int i = 0; i< task->argC; i++){
-                buffer_size+=task->argV[i]->len;
-                buffer_size+=sizeof (size_t);
-            }
-
-            char *convert =malloc(sizeof(size_t));
-            sprintf(convert,"%zu",task->argC);
-            buffer_size+=sizeof(size_t);
-
-            void *buffer = malloc(buffer_size);
-            char *ptr = (char *)buffer;
-
-            memcpy(ptr,convert,sizeof(size_t));
-            ptr+=sizeof(size_t);
-
-            for(int i =0; i<task->argC;i++){
-                // décalage après avoir copier le string
-                size_t decalage = task->argV[i]->len;
-                // on note ça taille
-                char *convert =malloc(sizeof(size_t));
-                sprintf(convert,"%zu",task->argC);
-                buffer_size+=sizeof(size_t);
-                memcpy(ptr,convert,sizeof (size_t));
-                ptr+=sizeof(size_t);
-                free(convert);
-
-                memcpy(ptr,(const void *)task->argV[i],decalage);
-                ptr+=decalage+sizeof(size_t);
-            }
-            int fd2 = open(concat(repname,"/args.txt"), O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
-            if(buffer_size!=write(fd2,buffer,buffer_size)){
-                perror("failed to write args");
-                return EXIT_FAILURE;
-            }
-            free(buffer);
-            close(fd2);
-
-            //sauvegarde de task->stdOut et stdErr
-            char std[2];std[0]=task->stdOut;std[1]=task->stdErr;
-            int fd3 = open(concat(repname,"/std.txt"),O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
-            if(write(fd3,std,strlen(std))!= strlen(std)){
-                perror("Failed to write stdErr and Out");
-                return EXIT_FAILURE;
-            }
-            close(fd3);
-
-            //sauvegarde de task->stCreated
-            char *buffer_screat = malloc(sizeof(struct tm));
-            char *ptr_screat = buffer_screat;
-            sprintf(ptr_screat,"%d",task->stCreated.tm_sec);
-            ptr_screat +=sizeof(int);
-            sprintf(ptr_screat,"%d",task->stCreated.tm_min);
-            ptr_screat +=sizeof(int);
-            sprintf(ptr_screat,"%d",task->stCreated.tm_hour);
-            ptr_screat +=sizeof(int);
-            sprintf(ptr_screat,"%d",task->stCreated.tm_mday);
-            ptr_screat +=sizeof(int);
-            sprintf(ptr_screat,"%d",task->stCreated.tm_mon);
-            ptr_screat +=sizeof(int);
-            sprintf(ptr_screat,"%d",task->stCreated.tm_year);
-            ptr_screat +=sizeof(int);
-            sprintf(ptr_screat,"%d",task->stCreated.tm_wday);
-            ptr_screat +=sizeof(int);
-            sprintf(ptr_screat,"%d",task->stCreated.tm_yday);
-            ptr_screat +=sizeof(int);
-            sprintf(ptr_screat,"%d",task->stCreated.tm_isdst);
-            ptr_screat +=sizeof(int);
-            sprintf(ptr_screat,"%ld",task->stCreated.tm_gmtoff);
-            ptr_screat +=sizeof(long);
-            memcpy(ptr_screat,task->stCreated.tm_zone,strlen(task->stCreated.tm_zone));
-            int fd4 = open(concat(repname,"/tmcreate.txt"),O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
-            if(sizeof(struct tm)!=write(fd4,buffer_screat,sizeof(struct tm))){
-                perror("failed to write stCreated");
-                return EXIT_FAILURE;
-            }
-            close(fd4);
-            //sauvegarde de task->stExecuted
-            char *buffer_scexec = malloc(sizeof(struct tm));
-            char *ptr_scexec = buffer_scexec;
-            sprintf(ptr_scexec,"%d",task->stExecuted.tm_sec);
-            ptr_scexec +=sizeof(int);
-            sprintf(ptr_scexec,"%d",task->stExecuted.tm_min);
-            ptr_scexec +=sizeof(int);
-            sprintf(ptr_scexec,"%d",task->stExecuted.tm_hour);
-            ptr_scexec +=sizeof(int);
-            sprintf(ptr_scexec,"%d",task->stExecuted.tm_mday);
-            ptr_scexec +=sizeof(int);
-            sprintf(ptr_scexec,"%d",task->stExecuted.tm_mon);
-            ptr_scexec +=sizeof(int);
-            sprintf(ptr_scexec,"%d",task->stExecuted.tm_year);
-            ptr_scexec +=sizeof(int);
-            sprintf(ptr_scexec,"%d",task->stExecuted.tm_wday);
-            ptr_scexec +=sizeof(int);
-            sprintf(ptr_scexec,"%d",task->stExecuted.tm_yday);
-            ptr_scexec +=sizeof(int);
-            sprintf(ptr_scexec,"%d",task->stExecuted.tm_isdst);
-            ptr_scexec +=sizeof(int);
-            sprintf(ptr_scexec,"%ld",task->stExecuted.tm_gmtoff);
-            ptr_scexec +=sizeof(long);
-            memcpy(ptr_scexec,task->stCreated.tm_zone,strlen(task->stCreated.tm_zone));
-            int fd5 = open(concat(repname,"/tmexecuted.txt"),O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
-            if(sizeof(struct tm)!=write(fd5,buffer_scexec,sizeof(struct tm))){
-                perror("failed to write stCreated");
-                return EXIT_FAILURE;
-            }
-            close(fd5);
-            //sauvegarde de task->lastPid
-            char *buffPid = malloc(sizeof (pid_t));
-            if (!buffPid) {
-                perror("can't allocate memory");
-                return EXIT_FAILURE;
-            }
-            sprintf(buffPid, "%d",task->lastPid);
-            int fd6 =open(concat(repname,"/pid.txt"),O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
-            if(sizeof (pid_t)!=write(fd6,buffPid,sizeof(pid_t))){
-                perror("failed to write count of runs");
-                return EXIT_FAILURE;
-            }
-            close(fd6);
-
-            //sauvegarde de task->runs
-            int fd7 = open(concat(repname,"/pid.txt"),O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
-            unsigned int nbEl = task->runs->count;
-            char *buf_int = malloc(sizeof (unsigned int));
-            memcpy(buf_int,(char*)&nbEl,sizeof (unsigned int));
-            if(sizeof (unsigned int)!=write(fd7,buf_int,sizeof (unsigned int))){
-                perror("failed to write count of runs");
-                return EXIT_FAILURE;
-            }
-            struct element_t *tm;
-            struct tm *time_current=malloc(sizeof(struct stTask));
-            for (tm=task->runs->first; tm!=NULL; tm=tm->next){
-                time_current= e->data;
-                char *buffer_screat = malloc(sizeof(struct tm));
-                char *ptr_screat = buffer_screat;
-                sprintf(ptr_screat,"%d",time_current->tm_sec);
-                ptr_screat +=sizeof(int);
-                sprintf(ptr_screat,"%d",time_current->tm_min);
-                ptr_screat +=sizeof(int);
-                sprintf(ptr_screat,"%d",time_current->tm_hour);
-                ptr_screat +=sizeof(int);
-                sprintf(ptr_screat,"%d",time_current->tm_mday);
-                ptr_screat +=sizeof(int);
-                sprintf(ptr_screat,"%d",time_current->tm_mon);
-                ptr_screat +=sizeof(int);
-                sprintf(ptr_screat,"%d",time_current->tm_year);
-                ptr_screat +=sizeof(int);
-                sprintf(ptr_screat,"%d",time_current->tm_wday);
-                ptr_screat +=sizeof(int);
-                sprintf(ptr_screat,"%d",time_current->tm_yday);
-                ptr_screat +=sizeof(int);
-                sprintf(ptr_screat,"%d",time_current->tm_isdst);
-                ptr_screat +=sizeof(int);
-                sprintf(ptr_screat,"%ld",time_current->tm_gmtoff);
-                ptr_screat +=sizeof(long);
-                memcpy(ptr_screat,time_current->tm_zone,strlen(time_current->tm_zone));
-
-                if(write(fd7,buffer_screat, sizeof (struct tm))!=sizeof (struct tm)){
-                    perror("failed to write run");
+                memcpy(bufTimingIter, task->daysOfWeek, sizeof(unsigned char) * 7);
+                if (91 != (write(fd, timing, sizeof(unsigned char) * 91))) {
+                    perror("Failed to save timing to file");
                     return EXIT_FAILURE;
                 }
-            }
-            close(fd7);
+                close(fd);
+                //on sauvegarde min heu et day
+                int fd_time = open(concat(repname, "/timing_uint.txt"), O_WRONLY | O_TRUNC | O_CREAT, S_IRWXU);
+                int nb = (sizeof(uint64_t) * 2) + sizeof(uint16_t) + sizeof(uint8_t);
+                char *buffTime = malloc(nb);
+                char *ptr_time = buffTask;
+                if (!buffTask) {
+                    perror("can't allocate memory");
+                    return EXIT_FAILURE;
+                }
 
+                memcpy(buffTime, buffTask, sizeof(uint64_t));
+                free(buffTask);
+                ptr_time += sizeof(uint64_t);
+                sprintf(ptr_time, "%"
+                PRIu64, task->min);
+                ptr_time += sizeof(uint64_t);
+                sprintf(ptr_time, "%"
+                PRIu16, task->heu);
+                ptr_time += sizeof(uint16_t);
+                sprintf(ptr_time, "%"
+                PRIu8, task->day);
+                if (write(fd_time, buffTime, nb) != nb) {
+                    perror("Failed to write time uint");
+                    return EXIT_FAILURE;
+                }
+                free(buffTime);
+                close(fd_time);
+
+                // on crée le répertoire de la tache
+
+                free(buffTask);
+                //on sauvegarde ARGC et ARGV
+
+                int buffer_size = 0;
+                for (int i = 0; i < task->argC; i++) {
+                    buffer_size += task->argV[i]->len;
+                    buffer_size += sizeof(size_t);
+                }
+
+                char *convert = malloc(sizeof(size_t));
+                sprintf(convert, "%zu", task->argC);
+                buffer_size += sizeof(size_t);
+
+                void *buffer = malloc(buffer_size);
+                char *ptr = (char *) buffer;
+
+                memcpy(ptr, convert, sizeof(size_t));
+                ptr += sizeof(size_t);
+
+                for (int i = 0; i < task->argC; i++) {
+                    // décalage après avoir copier le string
+                    size_t decalage = task->argV[i]->len;
+                    // on note ça taille
+                    char *convert = malloc(sizeof(size_t));
+                    sprintf(convert, "%zu", task->argC);
+                    buffer_size += sizeof(size_t);
+                    memcpy(ptr, convert, sizeof(size_t));
+                    ptr += sizeof(size_t);
+                    free(convert);
+
+                    memcpy(ptr, (const void *) task->argV[i], decalage);
+                    ptr += decalage + sizeof(size_t);
+                }
+                int fd2 = open(concat(repname, "/args.txt"), O_WRONLY | O_TRUNC | O_CREAT, S_IRWXU);
+                if (buffer_size != write(fd2, buffer, buffer_size)) {
+                    perror("failed to write args");
+                    return EXIT_FAILURE;
+                }
+                free(buffer);
+                close(fd2);
+
+                //sauvegarde de task->stdOut et stdErr
+                char std[2];
+                std[0] = task->stdOut;
+                std[1] = task->stdErr;
+                int fd3 = open(concat(repname, "/std.txt"), O_WRONLY | O_TRUNC | O_CREAT, S_IRWXU);
+                if (write(fd3, std, strlen(std)) != strlen(std)) {
+                    perror("Failed to write stdErr and Out");
+                    return EXIT_FAILURE;
+                }
+                close(fd3);
+
+                //sauvegarde de task->stCreated
+                char *buffer_screat = malloc(sizeof(struct tm));
+                char *ptr_screat = buffer_screat;
+                sprintf(ptr_screat, "%d", task->stCreated.tm_sec);
+                ptr_screat += sizeof(int);
+                sprintf(ptr_screat, "%d", task->stCreated.tm_min);
+                ptr_screat += sizeof(int);
+                sprintf(ptr_screat, "%d", task->stCreated.tm_hour);
+                ptr_screat += sizeof(int);
+                sprintf(ptr_screat, "%d", task->stCreated.tm_mday);
+                ptr_screat += sizeof(int);
+                sprintf(ptr_screat, "%d", task->stCreated.tm_mon);
+                ptr_screat += sizeof(int);
+                sprintf(ptr_screat, "%d", task->stCreated.tm_year);
+                ptr_screat += sizeof(int);
+                sprintf(ptr_screat, "%d", task->stCreated.tm_wday);
+                ptr_screat += sizeof(int);
+                sprintf(ptr_screat, "%d", task->stCreated.tm_yday);
+                ptr_screat += sizeof(int);
+                sprintf(ptr_screat, "%d", task->stCreated.tm_isdst);
+                ptr_screat += sizeof(int);
+                sprintf(ptr_screat, "%ld", task->stCreated.tm_gmtoff);
+                ptr_screat += sizeof(long);
+                memcpy(ptr_screat, task->stCreated.tm_zone, strlen(task->stCreated.tm_zone));
+                int fd4 = open(concat(repname, "/tmcreate.txt"), O_WRONLY | O_TRUNC | O_CREAT, S_IRWXU);
+                if (sizeof(struct tm) != write(fd4, buffer_screat, sizeof(struct tm))) {
+                    perror("failed to write stCreated");
+                    return EXIT_FAILURE;
+                }
+                close(fd4);
+                //sauvegarde de task->stExecuted
+                char *buffer_scexec = malloc(sizeof(struct tm));
+                char *ptr_scexec = buffer_scexec;
+                sprintf(ptr_scexec, "%d", task->stExecuted.tm_sec);
+                ptr_scexec += sizeof(int);
+                sprintf(ptr_scexec, "%d", task->stExecuted.tm_min);
+                ptr_scexec += sizeof(int);
+                sprintf(ptr_scexec, "%d", task->stExecuted.tm_hour);
+                ptr_scexec += sizeof(int);
+                sprintf(ptr_scexec, "%d", task->stExecuted.tm_mday);
+                ptr_scexec += sizeof(int);
+                sprintf(ptr_scexec, "%d", task->stExecuted.tm_mon);
+                ptr_scexec += sizeof(int);
+                sprintf(ptr_scexec, "%d", task->stExecuted.tm_year);
+                ptr_scexec += sizeof(int);
+                sprintf(ptr_scexec, "%d", task->stExecuted.tm_wday);
+                ptr_scexec += sizeof(int);
+                sprintf(ptr_scexec, "%d", task->stExecuted.tm_yday);
+                ptr_scexec += sizeof(int);
+                sprintf(ptr_scexec, "%d", task->stExecuted.tm_isdst);
+                ptr_scexec += sizeof(int);
+                sprintf(ptr_scexec, "%ld", task->stExecuted.tm_gmtoff);
+                ptr_scexec += sizeof(long);
+                memcpy(ptr_scexec, task->stCreated.tm_zone, strlen(task->stCreated.tm_zone));
+                int fd5 = open(concat(repname, "/tmexecuted.txt"), O_WRONLY | O_TRUNC | O_CREAT, S_IRWXU);
+                if (sizeof(struct tm) != write(fd5, buffer_scexec, sizeof(struct tm))) {
+                    perror("failed to write stCreated");
+                    return EXIT_FAILURE;
+                }
+                close(fd5);
+                //sauvegarde de task->lastPid
+                char *buffPid = malloc(sizeof(pid_t));
+                if (!buffPid) {
+                    perror("can't allocate memory");
+                    return EXIT_FAILURE;
+                }
+                sprintf(buffPid, "%d", task->lastPid);
+                int fd6 = open(concat(repname, "/pid.txt"), O_WRONLY | O_TRUNC | O_CREAT, S_IRWXU);
+                if (sizeof(pid_t) != write(fd6, buffPid, sizeof(pid_t))) {
+                    perror("failed to write count of runs");
+                    return EXIT_FAILURE;
+                }
+                close(fd6);
+
+                //sauvegarde de task->runs
+                int fd7 = open(concat(repname, "/runs.txt"), O_WRONLY | O_TRUNC | O_CREAT, S_IRWXU);
+                unsigned int nbEl = task->runs->count;
+                char *buf_int = malloc(sizeof(unsigned int));
+                memcpy(buf_int, (char *) &nbEl, sizeof(unsigned int));
+                if (sizeof(unsigned int) != write(fd7, buf_int, sizeof(unsigned int))) {
+                    perror("failed to write count of runs");
+                    return EXIT_FAILURE;
+                }
+                struct element_t *tm;
+                struct tm *time_current = malloc(sizeof(struct stTask));
+                for (tm = task->runs->first; tm != NULL; tm = tm->next) {
+                    time_current = e->data;
+                    char *buffer_screat = malloc(sizeof(struct tm));
+                    char *ptr_screat = buffer_screat;
+                    sprintf(ptr_screat, "%d", time_current->tm_sec);
+                    ptr_screat += sizeof(int);
+                    sprintf(ptr_screat, "%d", time_current->tm_min);
+                    ptr_screat += sizeof(int);
+                    sprintf(ptr_screat, "%d", time_current->tm_hour);
+                    ptr_screat += sizeof(int);
+                    sprintf(ptr_screat, "%d", time_current->tm_mday);
+                    ptr_screat += sizeof(int);
+                    sprintf(ptr_screat, "%d", time_current->tm_mon);
+                    ptr_screat += sizeof(int);
+                    sprintf(ptr_screat, "%d", time_current->tm_year);
+                    ptr_screat += sizeof(int);
+                    sprintf(ptr_screat, "%d", time_current->tm_wday);
+                    ptr_screat += sizeof(int);
+                    sprintf(ptr_screat, "%d", time_current->tm_yday);
+                    ptr_screat += sizeof(int);
+                    sprintf(ptr_screat, "%d", time_current->tm_isdst);
+                    ptr_screat += sizeof(int);
+                    sprintf(ptr_screat, "%ld", time_current->tm_gmtoff);
+                    ptr_screat += sizeof(long);
+                    memcpy(ptr_screat, time_current->tm_zone, strlen(time_current->tm_zone));
+
+                    if (write(fd7, buffer_screat, sizeof(struct tm)) != sizeof(struct tm)) {
+                        perror("failed to write run");
+                        return EXIT_FAILURE;
+                    }
+                }
+                close(fd7);
+            }
         }
         closedir(saturnd);
         return EXIT_SUCCESS;
