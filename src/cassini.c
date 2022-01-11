@@ -1,6 +1,9 @@
 #include "cassini.h"
 
-const char usage_info[] =
+
+
+int main(int argc, char *argv[]) {
+    const char usage_info[] =
     "\
    usage: cassini [OPTIONS] -l -> list all tasks\n\
       or: cassini [OPTIONS]    -> same\n\
@@ -20,7 +23,6 @@ const char usage_info[] =
      -p PIPES_DIR -> look for the pipes in PIPES_DIR (default: /tmp/<USERNAME>/saturnd/pipes)\n\
 ";
 
-int main(int argc, char *argv[]) {
     errno = 0;
     int ret = EXIT_SUCCESS;
 
@@ -31,9 +33,6 @@ int main(int argc, char *argv[]) {
 
     char *pipe_dir_req = NULL;
     char *pipe_dir_rep = NULL;
-
-    int pipe_req = -1;
-    int pipe_rep = -1;
 
     uint16_t operation = CLIENT_REQUEST_LIST_TASKS;
     uint64_t taskid;
@@ -118,37 +117,37 @@ int main(int argc, char *argv[]) {
         goto error;
     }
 
-    // obtain fd for reply-pipe and request-pipe
-    pipe_req = open(pipe_dir_req, O_WRONLY);
-    pipe_rep = open(pipe_dir_rep, O_RDONLY);
+    printf("Req{%s} Rep{%s}\n", pipe_dir_req, pipe_dir_rep);
 
-    if ((pipe_req < 0) || (pipe_rep < 0)) {
+    // obtain fd for reply-pipe and request-pipe
+
+    /*if ((pipe_req < 0) || (pipe_rep < 0)) {
         perror("open request-pipe failure");
         ret = EXIT_FAILURE;
         goto error;
-    }
+    }*/
 
     switch (operation) {
         case CLIENT_REQUEST_CREATE_TASK:
-            create_task(pipe_req, pipe_rep, minutes_str, hours_str, daysofweek_str, argc - optind, &argv[optind]);
+            create_task(pipe_dir_req, pipe_dir_rep, minutes_str, hours_str, daysofweek_str, argc - optind, &argv[optind]);
             break;
         case CLIENT_REQUEST_LIST_TASKS:
-            list_task(pipe_req, pipe_rep);
+            list_task(pipe_dir_req, pipe_dir_rep);
             break;
         case CLIENT_REQUEST_REMOVE_TASK:
-            remove_task(pipe_req, pipe_rep, taskid);
+            remove_task(pipe_dir_req, pipe_dir_rep, taskid);
             break;
         case CLIENT_REQUEST_GET_STDOUT:
-            rq_stdout_stderr(pipe_req, pipe_rep, taskid, operation);
+            rq_stdout_stderr(pipe_dir_req, pipe_dir_rep, taskid, operation);
             break;
         case CLIENT_REQUEST_GET_STDERR:
-            rq_stdout_stderr(pipe_req, pipe_rep, taskid, operation);
+            rq_stdout_stderr(pipe_dir_req, pipe_dir_rep, taskid, operation);
             break;
         case CLIENT_REQUEST_TERMINATE:
-            terminate(pipe_req, pipe_rep);
+            terminate(pipe_dir_req, pipe_dir_rep);
             break;
         case CLIENT_REQUEST_GET_TIMES_AND_EXITCODES:
-            times_exitcodes(pipe_req, pipe_rep, taskid);
+            times_exitcodes(pipe_dir_req, pipe_dir_rep, taskid);
             break;
     }
 
@@ -160,8 +159,6 @@ error:
     FREE_MEM(pipes_directory);
     FREE_MEM(pipe_dir_req);
     FREE_MEM(pipe_dir_rep);
-    CLOSE_FILE(pipe_req);
-    CLOSE_FILE(pipe_rep);
 
     return ret;
 }

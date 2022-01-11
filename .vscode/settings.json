@@ -1,0 +1,10 @@
+{
+    "C_Cpp.errorSquiggles": "Disabled",
+    "files.associations": {
+        "saturnd.h": "c",
+        "cassini.h": "c",
+        "server-reply.h": "c",
+        "client-request.h": "c",
+        "limits": "c"
+    }
+}
