@@ -176,27 +176,145 @@ lExit:
 
 // Restore content of context->tasks from disk
 int restoreTasksFromHdd(struct stContext *context){
-    char *path = concat(concat("/tmp/",getlogin()),"/saturnd");
-    DIR *saturnd = opendir(path);
-    struct dirent *current;
-    if(saturnd){
-        while(current = readdir(saturnd)){
-            if(current->d_type == DT_DIR && strcmp(current->d_name,"pipes")!=0
-            && strcmp(current->d_name,".")!=0 && strcmp(current->d_name,"..")!=0 ){
-                char *pathtask=concat(concat(path,"/"),current->d_name);
-                DIR *task = opendir(pathtask);
-                if(task){
-                    //traiter la lecture
+    struct stString  *filePath = createFilePath(TASKS_FILE);
+    int exit_value = EXIT_SUCCESS;
+    int fileD = -1;
+    uint32_t fileSize = 0;
+    struct element_t *taskEl  = NULL;
+    struct stTask    *task    = NULL;
+    struct stTask    *newTask = NULL;
+
+    if(!filePath){
+        exit_value = EXIT_FAILURE;
+        procError("Can't allocate memory");
+        goto lExit;
+    }
+
+    fileD = open(filePath->text, O_RDONLY);
+
+    if (fileD < 0){
+        procInfo("Can't open file " TASKS_FILE " working without session restoration");
+        goto lExit;
+    }
+
+    //find size of file & jump to beginning
+    fileSize = lseek(fileD, 0, SEEK_END);
+    lseek(fileD, 0, SEEK_SET);
+
+    // read all tasks
+    while ((fileSize > sizeof(struct stTask)) && (EXIT_SUCCESS == exit_value)){
+        newTask = (struct stTask*) malloc(sizeof(struct stTask));
+        if (!newTask){
+            procError("memory allocation");
+            exit_value = EXIT_FAILURE;
+            break;
+        }
+
+        if (sizeof(struct stTask) != read(fileD, newTask, sizeof(struct stTask))){
+            procError("can't read data");
+            exit_value = EXIT_FAILURE;
+            break;
+        }
+        fileSize -= sizeof(struct stTask);
+
+        //read task arguments
+        newTask->argV = (struct stString **)malloc(sizeof(struct stString *) * newTask->argC);
+        if (!newTask->argV){
+            procError("memory allocation");
+            exit_value = EXIT_FAILURE;
+            break;
+        }
+
+        //read all command's arguments
+        for (size_t i = 0; i < newTask->argC; i++) {
+            uint32_t strLen = 0;
+
+            if (sizeof(strLen) != read(fileD, &strLen, sizeof(strLen))){
+                procError("can't read data");
+                exit_value = EXIT_FAILURE;
+                break;
+            }
+            newTask->argV[i] = createStringBuffer(strLen);
+
+            if (newTask->argV[i]->len != read(fileD, newTask->argV[i]->text, newTask->argV[i]->len)){
+                procError("read arg text");
+                exit_value = EXIT_FAILURE;
+                break;
+            }
+
+            newTask->argV[i]->text[strLen] = 0;         //string must be terminated by 0
+            fileSize -= (sizeof(strLen) + newTask->argV[i]->len);
+        }
+
+        if (exit_value != EXIT_SUCCESS){
+            break;
+        }
+
+        //read all runs
+        newTask->runs = (struct listElements_t *)malloc(sizeof(struct listElements_t));
+        if (!newTask->runs){
+            procError("memory allocation");
+            exit_value = EXIT_FAILURE;
+            break;
+        }
+        memset(newTask->runs, 0, sizeof(struct listElements_t));
+
+        uint32_t runsCount = 0;
+        if (sizeof(runsCount) != read(fileD, &runsCount, sizeof(runsCount))){
+            procError("can't read data");
+            exit_value = EXIT_FAILURE;
+            break;
+        }
+
+        fileSize -= sizeof(runsCount);
+
+        for (uint32_t i = 0; i < runsCount; i++){
+            struct stRunStat* run = (struct stRunStat*)malloc(sizeof(struct stRunStat));
+            if (run){
+                if (sizeof(struct stRunStat) == read(fileD, run, sizeof(struct stRunStat))){
+                    pushLast(newTask->runs, run);
+                    fileSize -= sizeof(struct stRunStat);
                 }else{
-                    closedir(saturnd);
-                    return EXIT_FAILURE;
+                    procError("can't read data");
+                    exit_value = EXIT_FAILURE;
+                    free(run);
+                    break;
                 }
+            } else {
+                procError("memory allocation");
+                exit_value = EXIT_FAILURE;
+                break;
             }
         }
-        closedir(saturnd);
-        return EXIT_SUCCESS;
+
+        //task was read entirely -> push to list of tasks
+        if (EXIT_SUCCESS == exit_value){
+            pushLast(context->tasks, newTask);
+        }
     }
-    return EXIT_FAILURE;
+
+    // set lastTaskId
+    if (EXIT_SUCCESS == exit_value){
+        struct element_t *taskEl  = context->tasks->first;
+        struct stTask    *task    = NULL;
+        uint64_t          maxTaskId = 0;
+        while ((taskEl) && (EXIT_SUCCESS == exit_value)){
+            task = (struct stTask *)(taskEl->data);
+            if (task->taskId > maxTaskId){
+                maxTaskId = task->taskId;
+            }
+            taskEl = taskEl->next;
+        }
+        context->lastTaskId = maxTaskId;
+    } else {
+        freeTask(newTask);
+        goto lExit;
+    }
+
+    lExit:
+    freeString(filePath);
+    CLOSE_FILE(fileD);
+    return exit_value;
 }
 
 
