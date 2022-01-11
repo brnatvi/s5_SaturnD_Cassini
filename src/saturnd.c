@@ -162,8 +162,6 @@ lExit:
     return ret;
 }
 
-
-
 // Restore content of context->tasks from disk
 int restoreTasksFromHdd(struct stContext *context){
     struct stString  *filePath = createFilePath(TASKS_FILE);
@@ -396,10 +394,12 @@ int saveTasksToHdd(struct stContext *context){
     }
 
 lExit:
+
     freeString(filePath);
     CLOSE_FILE(fileD);
     return exit_value;
 }
+
 
 int processListCmd(struct stContext *context){
 
@@ -1076,13 +1076,6 @@ int writeReply(struct stContext *context, const uint8_t *buff, size_t size)
 lExit:
     CLOSE_FILE(context->pipeReply);
     return ret;
-}
-
-char* concat(char* a,char* b){
-    char *buffer = malloc(strlen(a)+strlen(b)+1);
-    strcpy(buffer,a);
-    strcat(buffer,b);
-    return buffer;
 }
 
 
