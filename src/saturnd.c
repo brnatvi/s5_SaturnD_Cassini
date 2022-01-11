@@ -374,23 +374,62 @@ int saveTasksToHdd(struct stContext *context){
             close(fd3);
 
             //sauvegarde de task->stCreated
-            char stCreatedTab[9]={task->stCreated.tm_sec,task->stCreated.tm_min,task->stCreated.tm_hour,
-                       task->stCreated.tm_mday,task->stCreated.tm_mon,task->stCreated.tm_year,
-                       task->stCreated.tm_wday,task->stCreated.tm_yday,task->stCreated.tm_isdst};
+            char *buffer_screat = malloc(sizeof(struct tm));
+            char *ptr_screat = buffer_screat;
+            sprintf(ptr_screat,"%d",task->stCreated.tm_sec);
+            ptr_screat +=sizeof(int);
+            sprintf(ptr_screat,"%d",task->stCreated.tm_min);
+            ptr_screat +=sizeof(int);
+            sprintf(ptr_screat,"%d",task->stCreated.tm_hour);
+            ptr_screat +=sizeof(int);
+            sprintf(ptr_screat,"%d",task->stCreated.tm_mday);
+            ptr_screat +=sizeof(int);
+            sprintf(ptr_screat,"%d",task->stCreated.tm_mon);
+            ptr_screat +=sizeof(int);
+            sprintf(ptr_screat,"%d",task->stCreated.tm_year);
+            ptr_screat +=sizeof(int);
+            sprintf(ptr_screat,"%d",task->stCreated.tm_wday);
+            ptr_screat +=sizeof(int);
+            sprintf(ptr_screat,"%d",task->stCreated.tm_yday);
+            ptr_screat +=sizeof(int);
+            sprintf(ptr_screat,"%d",task->stCreated.tm_isdst);
+            ptr_screat +=sizeof(int);
+            sprintf(ptr_screat,"%ld",task->stCreated.tm_gmtoff);
+            ptr_screat +=sizeof(long);
+            memcpy(ptr_screat,task->stCreated.tm_zone,strlen(task->stCreated.tm_zone));
             int fd4 = open(concat(repname,"/tmcreate.txt"),O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
-
-            if(strlen(stCreatedTab)!=write(fd4,stCreatedTab,strlen(stCreatedTab))){
+            if(sizeof(struct tm)!=write(fd4,buffer_screat,sizeof(struct tm))){
                 perror("failed to write stCreated");
                 return EXIT_FAILURE;
             }
             close(fd4);
             //sauvegarde de task->stExecuted
-            char stExecutedTab[9]={task->stExecuted.tm_sec,task->stExecuted.tm_min,task->stExecuted.tm_hour,
-                       task->stExecuted.tm_mday,task->stExecuted.tm_mon,task->stExecuted.tm_year,
-                       task->stExecuted.tm_wday,task->stExecuted.tm_yday,task->stExecuted.tm_isdst};
-            int fd5 = open(concat(repname,"/tmexec.txt"),O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
-            if(strlen(stExecutedTab)!=write(fd5,stExecutedTab,strlen(stExecutedTab))){
-                perror("failed to write stExecuted");
+            char *buffer_scexec = malloc(sizeof(struct tm));
+            char *ptr_scexec = buffer_scexec;
+            sprintf(ptr_scexec,"%d",task->stExecuted.tm_sec);
+            ptr_scexec +=sizeof(int);
+            sprintf(ptr_scexec,"%d",task->stExecuted.tm_min);
+            ptr_scexec +=sizeof(int);
+            sprintf(ptr_scexec,"%d",task->stExecuted.tm_hour);
+            ptr_scexec +=sizeof(int);
+            sprintf(ptr_scexec,"%d",task->stExecuted.tm_mday);
+            ptr_scexec +=sizeof(int);
+            sprintf(ptr_scexec,"%d",task->stExecuted.tm_mon);
+            ptr_scexec +=sizeof(int);
+            sprintf(ptr_scexec,"%d",task->stExecuted.tm_year);
+            ptr_scexec +=sizeof(int);
+            sprintf(ptr_scexec,"%d",task->stExecuted.tm_wday);
+            ptr_scexec +=sizeof(int);
+            sprintf(ptr_scexec,"%d",task->stExecuted.tm_yday);
+            ptr_scexec +=sizeof(int);
+            sprintf(ptr_scexec,"%d",task->stExecuted.tm_isdst);
+            ptr_scexec +=sizeof(int);
+            sprintf(ptr_scexec,"%ld",task->stExecuted.tm_gmtoff);
+            ptr_scexec +=sizeof(long);
+            memcpy(ptr_scexec,task->stCreated.tm_zone,strlen(task->stCreated.tm_zone));
+            int fd5 = open(concat(repname,"/tmexecuted.txt"),O_WRONLY |O_TRUNC | O_CREAT,S_IRWXU);
+            if(sizeof(struct tm)!=write(fd5,buffer_scexec,sizeof(struct tm))){
+                perror("failed to write stCreated");
                 return EXIT_FAILURE;
             }
             close(fd5);
@@ -421,10 +460,31 @@ int saveTasksToHdd(struct stContext *context){
             struct tm *time_current=malloc(sizeof(struct stTask));
             for (tm=task->runs->first; tm!=NULL; tm=tm->next){
                 time_current= e->data;
-                char z[9]={time_current->tm_sec,time_current->tm_min,time_current->tm_hour,
-                           time_current->tm_mday,time_current->tm_mon,time_current->tm_year,
-                           time_current->tm_wday,time_current->tm_yday,time_current->tm_isdst};
-                if(write(fd7,z,strlen(z))!=strlen(z)){
+                char *buffer_screat = malloc(sizeof(struct tm));
+                char *ptr_screat = buffer_screat;
+                sprintf(ptr_screat,"%d",time_current->tm_sec);
+                ptr_screat +=sizeof(int);
+                sprintf(ptr_screat,"%d",time_current->tm_min);
+                ptr_screat +=sizeof(int);
+                sprintf(ptr_screat,"%d",time_current->tm_hour);
+                ptr_screat +=sizeof(int);
+                sprintf(ptr_screat,"%d",time_current->tm_mday);
+                ptr_screat +=sizeof(int);
+                sprintf(ptr_screat,"%d",time_current->tm_mon);
+                ptr_screat +=sizeof(int);
+                sprintf(ptr_screat,"%d",time_current->tm_year);
+                ptr_screat +=sizeof(int);
+                sprintf(ptr_screat,"%d",time_current->tm_wday);
+                ptr_screat +=sizeof(int);
+                sprintf(ptr_screat,"%d",time_current->tm_yday);
+                ptr_screat +=sizeof(int);
+                sprintf(ptr_screat,"%d",time_current->tm_isdst);
+                ptr_screat +=sizeof(int);
+                sprintf(ptr_screat,"%ld",time_current->tm_gmtoff);
+                ptr_screat +=sizeof(long);
+                memcpy(ptr_screat,time_current->tm_zone,strlen(time_current->tm_zone));
+
+                if(write(fd7,buffer_screat, sizeof (struct tm))!=sizeof (struct tm)){
                     perror("failed to write run");
                     return EXIT_FAILURE;
                 }
@@ -435,7 +495,7 @@ int saveTasksToHdd(struct stContext *context){
         closedir(saturnd);
         return EXIT_SUCCESS;
     }
-    return EXIT_FAILURE;;
+    return EXIT_FAILURE;
 }
 
 int processListCmd(struct stContext *context){
