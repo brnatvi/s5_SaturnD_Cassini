@@ -33,6 +33,8 @@
 
 #define TASKS_FILE        "tasks.bin"
 
+#define IS_DAEMON         1
+
 struct stString
 {
     char  *text;
