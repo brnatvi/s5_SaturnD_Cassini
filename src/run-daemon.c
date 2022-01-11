@@ -12,22 +12,20 @@ void createChild(){
 }
 
 void run_daemon(){
+    // Allows keeping only the child process.
+    createChild();
 
-        // Allows keeping only the child process.
-        createChild();
+    // Creation of a new session for the child process.
+    if (setsid() < 0) exit(EXIT_FAILURE);
 
-        // Creation of a new session for the child process.
-        if (setsid() < 0) exit(EXIT_FAILURE);
+    // here: possible to implement a signal handler
 
-        // here: possible to implement a signal handler
+    // The double fork avoids having to wait for the child when no synchronization is needed.
+    createChild();
 
-        // The double fork avoids having to wait for the child when no synchronization is needed.
-        createChild();
+    // Close all open file descriptors that can be inherited from the parent.
+    for (int x = sysconf(_SC_OPEN_MAX); x>=0; x--)close (x);
 
-        // Close all open file descriptors that can be inherited from the parent.
-        for (int x = sysconf(_SC_OPEN_MAX); x>=0; x--)close (x);
-
-        // Allows you to update the log system.
-        openlog ("saturnd", LOG_PID, LOG_DAEMON);
-
+    // Allows you to update the log system.
+    openlog ("saturnd", LOG_PID, LOG_DAEMON);
 }

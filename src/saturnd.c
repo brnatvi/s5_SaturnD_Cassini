@@ -1,9 +1,14 @@
 #include "saturnd.h"
 
+const int IS_DAEMON = 0;
+
 int main(int argc, char *argv[]) 
 {
-
-    //run_daemon();
+    if (IS_DAEMON){
+        run_daemon();
+    }
+    
+    procInfo("Start saturnd ...");
 
     int              ret = EXIT_SUCCESS;
     struct pollfd    fds[1];
@@ -13,7 +18,7 @@ int main(int argc, char *argv[])
     struct stContext *context = (struct stContext*) malloc(sizeof(struct stContext));
     if (!context) 
     {
-        perror("malloc context is failed");
+        procError("malloc context is failed");
         ret = EXIT_FAILURE;
         goto lExit;
     }    
@@ -21,7 +26,7 @@ int main(int argc, char *argv[])
 
     context->tasks = (struct listElements_t*) malloc(sizeof(struct listElements_t));
     if (!context->tasks) {
-        perror("malloc context->tasks is failed");
+        procError("malloc context->tasks is failed");
         ret = EXIT_FAILURE;
         goto lExit;
     }
@@ -37,7 +42,7 @@ int main(int argc, char *argv[])
  
     if (!isFileExists(context->pipeReqName->text)){
         if (mkfifo(context->pipeReqName->text, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) < 0){
-            perror("make fifo is failure");
+            procError("make fifo is failure");
             ret = EXIT_FAILURE;
             goto lExit;
         }
@@ -45,7 +50,7 @@ int main(int argc, char *argv[])
 
     if (!isFileExists(context->pipeRepName->text)){
         if (mkfifo(context->pipeRepName->text, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) < 0){
-            perror("make fifo is failure");
+            procError("make fifo is failure");
             ret = EXIT_FAILURE;
             goto lExit;
         }
@@ -54,19 +59,20 @@ int main(int argc, char *argv[])
     //obtain fd for reply-pipe and request-pipe, using NONBLOCK more for request FIFO to be capable to open it 
     //even if on other side there is no any process
 
-    //WARNING: pipe is opened with O_RDWR instead O_RDONLY for next reason:
+    //IMPORTANT: pipe is opened with O_RDWR instead O_RDONLY for next reason:
     //function **poll** returns with POLLHUP value in fds[0].revents constantly and immediately after first 
     //communication session with Cassini -> cassini close the request pipe and this action force Saturn to
     //return from **poll** all the time with POLLHUP return code.
     //this behavious produce serions CPU load, and to optimize it next hack was used:
     //https://stackoverflow.com/questions/22021253/poll-on-named-pipe-returns-with-pollhup-constantly-and-immediately
-    //N.B.: way how pipes are working under POSIX systems isn't looking user-friendly unfortunatelly.
     context->pipeRequest = open(context->pipeReqName->text, O_RDWR | O_NONBLOCK);   
     if (context->pipeRequest < 0){
-        perror("open fifo is failed");
+        procError("open fifo is failed");
         ret = EXIT_FAILURE;
         goto lExit;
     }
+
+    procInfo("restorting state ...");
 
     // 3) Load from disc list of the tasks and store it in context->pTasks
     ret = restoreTasksFromHdd(context);
@@ -75,14 +81,7 @@ int main(int argc, char *argv[])
         goto lExit;
     }
 
-    /*
-    while (1){
-        // here: Insert daemon code.
-        syslog (LOG_NOTICE, "First daemon started.");
-    }
-    syslog (LOG_NOTICE, "First daemon terminated.");
-    closelog();
-     **/
+    procInfo("daemon is waiting for requests");
 
     // 4) Organize loop
     // - listen request-pipe, if something arrive - read first 2 bytes (OPCODE) and delegate read and execute the rest to 
@@ -119,14 +118,14 @@ int main(int argc, char *argv[])
                     case CLIENT_REQUEST_GET_STDOUT              : ret = processStdOutCmd(context); break;
                     case CLIENT_REQUEST_GET_STDERR              : ret = processStdErrCmd(context); break;
                     default :
-                        perror("unknown request!");
+                        procError("unknown request!");
                         ret = EXIT_FAILURE;
                         break;
                 }
             }
 
         } else if (pollRet < 0){ 
-            perror("poll error");
+            procError("poll error");
             ret = EXIT_FAILURE;
             break;
         }
@@ -145,10 +144,12 @@ int main(int argc, char *argv[])
       //  }
     }
 
+    procInfo("shutting down, saving state");
     if (EXIT_SUCCESS == ret){
         ret = saveTasksToHdd(context);
     }
 
+    procInfo("closing ...");
 lExit:
     //clear all list elements
     while(context->tasks->first){
@@ -163,6 +164,10 @@ lExit:
     FREE_STR(context->pipeReqName);
     FREE_STR(context->pipeRepName);
     FREE_MEM(context);
+    
+    procInfo("that's all, see you!");
+
+    closeDeamonLog();
 
     return ret;
 }
@@ -190,7 +195,7 @@ int processListCmd(struct stContext *context){
     int acc=sizeof(uint16_t)+ sizeof(uint32_t);
     char *buf= malloc(acc);
     if (buf == NULL){
-        perror("Error realloc");
+        procError("Error realloc");
         exit_value= EXIT_FAILURE;
         goto lExit;
     }
@@ -214,6 +219,7 @@ int processListCmd(struct stContext *context){
         uint64_t minutes = htobe64(task->min);
         uint32_t hours = htobe32(task->heu);
         uint8_t days = task->day;
+
         //Task
         char bufTaskIDTiming[sizeof(uint64_t)+sizeof(uint64_t)+sizeof(uint32_t)+ sizeof(uint8_t)];
         memmove(bufTaskIDTiming, &idTask, sizeof(uint64_t));
@@ -225,7 +231,7 @@ int processListCmd(struct stContext *context){
         int sizeBuf= sizeof(uint32_t);
         char *commandLineBuf = malloc(sizeBuf);
         if (commandLineBuf==NULL){
-            perror("fail malloc");
+            procError("fail malloc");
             exit_value=EXIT_FAILURE;
         }
         uint32_t nbrArg = htobe32(task->argC);
@@ -238,7 +244,7 @@ int processListCmd(struct stContext *context){
 
             commandLineBuf = realloc(commandLineBuf, sizeBuf);
             if (commandLineBuf == NULL){
-                perror("Error realloc");
+                procError("Error realloc");
                 exit_value= EXIT_FAILURE;
                 goto lExit;
             }
@@ -254,7 +260,7 @@ int processListCmd(struct stContext *context){
 
         buf = realloc(buf, acc);
         if (buf == NULL){
-            perror("Error realloc");
+            procError("Error realloc");
             exit_value= EXIT_FAILURE;
             goto lExit;
         }
@@ -293,14 +299,14 @@ int processCreateCmd(struct stContext *context){
     //create structure for new task
     struct stTask *newTask = (struct stTask*) malloc(sizeof(struct stTask)); 
     if (!newTask){
-        perror("memory allocation");
+        procError("memory allocation");
         retCode = EXIT_FAILURE;
         goto lExit;
     }
 
     newTask->runs = (struct listElements_t *)malloc(sizeof(struct listElements_t));
     if (!newTask->runs){
-        perror("memory allocation");
+        procError("memory allocation");
         retCode = EXIT_FAILURE;
         goto lExit;
     }
@@ -309,7 +315,7 @@ int processCreateCmd(struct stContext *context){
     // read timing
     rezRead = read(context->pipeRequest, &min, sizeof(min));
     if (rezRead < sizeof(min)){
-        perror("read minutes");
+        procError("read minutes");
         retCode = EXIT_FAILURE;
         goto lExit;
     }
@@ -317,7 +323,7 @@ int processCreateCmd(struct stContext *context){
 
     rezRead = read(context->pipeRequest, &hours, sizeof(hours));
     if (rezRead < sizeof(hours)){
-        perror("read hours");
+        procError("read hours");
         retCode = EXIT_FAILURE;
         goto lExit;
     }
@@ -325,7 +331,7 @@ int processCreateCmd(struct stContext *context){
 
     rezRead = read(context->pipeRequest, &days, sizeof(days));
     if (rezRead < sizeof(days)){
-        perror("read daysOfWeek");
+        procError("read daysOfWeek");
         retCode = EXIT_FAILURE;
         goto lExit;
     }
@@ -361,7 +367,7 @@ int processCreateCmd(struct stContext *context){
     // fill argC
     rezRead = read(context->pipeRequest, &argc, sizeof(argc));
     if (rezRead < sizeof(argc)){
-        perror("read argc");
+        procError("read argc");
         retCode = EXIT_FAILURE;
         goto lExit;
     }
@@ -370,7 +376,7 @@ int processCreateCmd(struct stContext *context){
 
     newTask->argV = (struct stString **)malloc(sizeof(struct stString *) * newTask->argC);
     if (!newTask->argV){
-        perror("memory allocation");
+        procError("memory allocation");
         retCode = EXIT_FAILURE;
         goto lExit;
     }
@@ -381,7 +387,7 @@ int processCreateCmd(struct stContext *context){
         rezRead = read(context->pipeRequest, &strLen, sizeof(strLen));
         if (rezRead < sizeof(strLen))
         {
-            perror("read argc");
+            procError("read argc");
             retCode = EXIT_FAILURE;
             break;
         }
@@ -391,7 +397,7 @@ int processCreateCmd(struct stContext *context){
         rezRead = read(context->pipeRequest, newTask->argV[i]->text, newTask->argV[i]->len);
         if (rezRead < newTask->argV[i]->len)
         {
-            perror("read arg text");
+            procError("read arg text");
             retCode = EXIT_FAILURE;
             break;
         }
@@ -446,7 +452,7 @@ int processRemoveCmd(struct stContext *context){
     // read task ID
     rezRead = read(context->pipeRequest, &taskId, sizeof(taskId));
     if (rezRead < sizeof(taskId)){
-        perror("read task ID");
+        procError("read task ID");
         ret = EXIT_FAILURE;
         goto lExit;
     }
@@ -465,11 +471,11 @@ int processRemoveCmd(struct stContext *context){
 
     if (taskEl)
     {
-        sprintf(txtBuf, "/tasks/%lu/stdout", task->taskId);
+        sprintf(txtBuf, "/tasks/%lu/%s", task->taskId, TASK_STD_OUT_NAME);
         GET_DEFAULT_PATH(txtPath, txtBuf);
         remove(txtPath);
 
-        sprintf(txtBuf, "/tasks/%lu/stderr", task->taskId);
+        sprintf(txtBuf, "/tasks/%lu/%s", task->taskId, TASK_STD_ERR_NAME);
         GET_DEFAULT_PATH(txtPath, txtBuf);
         remove(txtPath);
 
@@ -503,7 +509,7 @@ int processTimesExitCodesCmd(struct stContext *context){
     //TaskId
     size_t rezRead = read(context->pipeRequest, &taskIdRq, sizeof(uint64_t));
     if (rezRead < sizeof(uint64_t)){
-        perror("read minutes");
+        procError("read minutes");
         exit_value = EXIT_FAILURE;
         goto lExit;
     }
@@ -521,8 +527,9 @@ int processTimesExitCodesCmd(struct stContext *context){
             //Header
             int acc=sizeof(uint16_t)+ sizeof(uint32_t);
             char *buf= malloc(acc);
+            char *tmp= NULL;
             if (buf==NULL){
-                perror("Fail malloc");
+                procError("Fail malloc");
                 exit_value=EXIT_FAILURE;
                 goto lExit;
             }
@@ -540,12 +547,31 @@ int processTimesExitCodesCmd(struct stContext *context){
                 uint64_t time = htobe64(mktime(&s->stTime));
 
                 //Code
-                uint16_t code = htobe16((s->code==0)?0xFFFF:s->code);
+                //https://man7.org/linux/man-pages/man2/wait.2.html                
+                // WIFEXITED(wstatus)
+                //        returns true if the child terminated normally, that is, by
+                //        calling exit(3) or _exit(2), or by returning from main().
+                // 
+                // WEXITSTATUS(wstatus)
+                //        returns the exit status of the child.  This consists of
+                //        the least significant 8 bits of the status argument that
+                //        the child specified in a call to exit(3) or _exit(2) or as
+                //        the argument for a return statement in main().  This macro
+                //        should be employed only if WIFEXITED returned true.                
+                //We are using those 2 macro to check - was process closed normally (not by signal)
+                //and if YES - return code 8 bits.
+                uint16_t code = htobe16(0xFFFF); //no sense to do htobe16 for 0xFFFF but to keep consistency we are using it
+                if (WIFEXITED(s->code)){
+                    code = htobe16(WEXITSTATUS(s->code));
+                }
 
                 acc+= sizeof(uint16_t)+ sizeof(uint64_t);
-                buf=realloc(buf, acc);
-                if (buf==NULL){
-                    perror("Fail realloc");
+                tmp=realloc(buf, acc);
+                if (tmp){
+                    buf = tmp;
+                } else {
+                    free(buf);
+                    procError("Fail realloc");
                     exit_value=EXIT_FAILURE;
                     goto lExit;
                 }
@@ -609,14 +635,12 @@ int maintainTasks(struct stContext *context){
 
         time_t taskLastExecTime = mktime(&task->stExecuted);
 
-        if (    (0 < task->lastPid)
-             && (5.0 <= difftime(curTime, taskLastExecTime)) //5 seconds later
-           )
+        if ((task->lastPid > 0) && (difftime(curTime, taskLastExecTime) >= 5.0)) //5 seconds later           
         {
             int status = 0;
             pid_t pidR = waitpid(task->lastPid, &status, WNOHANG);
             if (pidR == -1){
-                perror("wait error!");
+                procError("wait error!");
                 ret = EXIT_FAILURE;
             } else if (pidR == 0){
                 //still rinning!
@@ -646,11 +670,13 @@ int maintainTasks(struct stContext *context){
                ret = execTask(context, task);
                if ( EXIT_SUCCESS == ret)
                {
+               #if !defined(SATURN_DEAMON_MODE)
                     printf("%02u:%02u:%02u Execute task %lu, {%s}\n", 
                     stCurTime.tm_hour,
                     stCurTime.tm_min,
                     stCurTime.tm_sec,
                     task->taskId, task->argV[0]->text);
+               #endif     
 
                     task->stExecuted = stCurTime;    
                }
@@ -819,14 +845,14 @@ int writeReply(struct stContext *context, const uint8_t *buff, size_t size)
     context->pipeReply = open(context->pipeRepName->text, O_WRONLY);   
     if (context->pipeReply < 0)
     {
-        perror("open fifo is failed");
+        procError("open pipe is failed");
         ret = EXIT_FAILURE;
         goto lExit;
     }
 
     if (write(context->pipeReply, buff, size) < (ssize_t)size) 
     {
-        perror("write to pipe failure");
+        procError("write to pipe failure");
         ret = EXIT_FAILURE;
         goto lExit;
     }
@@ -846,7 +872,7 @@ int execTask(struct stContext *context, struct stTask * task)
 
     char ** argv = (char **)malloc(sizeof(char *)*(task->argC+1));
     if (!argv) {
-        perror("read arg text");
+        procError("read arg text");
         ret = EXIT_FAILURE;
         goto lExit;
     }
@@ -856,9 +882,9 @@ int execTask(struct stContext *context, struct stTask * task)
     }
     argv[task->argC] = NULL;//for execvp
 
-    sprintf(txtBuf, "/tasks/%lu/stdout", task->taskId);
+    sprintf(txtBuf, "/tasks/%lu/%s", task->taskId, TASK_STD_OUT_NAME);
     fileOut = createFilePath(txtBuf);
-    sprintf(txtBuf, "/tasks/%lu/stderr", task->taskId);
+    sprintf(txtBuf, "/tasks/%lu/%s", task->taskId, TASK_STD_ERR_NAME);
     fileErr = createFilePath(txtBuf);
 
     task->stdOut = open(fileOut->text, 
@@ -869,14 +895,14 @@ int execTask(struct stContext *context, struct stTask * task)
                         S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR | S_IWGRP | S_IWOTH);
 
     if ((task->stdOut < 0) || (task->stdErr < 0)){
-        perror("file open failed");
+        procError("file open failed");
         ret = EXIT_FAILURE;
         goto lExit;
     }
 
     task->lastPid = fork();
     if (-1 == task->lastPid){
-        perror("Fork failed");
+        procError("Fork failed");
         ret = EXIT_FAILURE;
         goto lExit;
     } 
@@ -929,7 +955,7 @@ int sendFileContent(struct stContext *context, const char *fileName)
     // read task ID
     rezRead = read(context->pipeRequest, &taskId, sizeof(taskId));
     if (rezRead < sizeof(taskId)){
-        perror("read task ID");
+        procError("read task ID");
         ret = EXIT_FAILURE;
         goto lExit;
     }
@@ -937,7 +963,7 @@ int sendFileContent(struct stContext *context, const char *fileName)
 
     context->pipeReply = open(context->pipeRepName->text, O_WRONLY);   
     if (context->pipeReply < 0){
-        perror("open pipe is failed");
+        procError("open pipe is failed");
         ret = EXIT_FAILURE;
         goto lExit;
     }
@@ -959,7 +985,7 @@ int sendFileContent(struct stContext *context, const char *fileName)
         bufSize = 2 * sizeof(uint16_t);
 
         if (write(context->pipeReply, replyBuf, bufSize) < (ssize_t)bufSize){
-            perror("write to pipe failure");
+            procError("write to pipe failure");
             ret = EXIT_FAILURE;
         }
         goto lExit;
@@ -978,7 +1004,7 @@ int sendFileContent(struct stContext *context, const char *fileName)
         bufSize = sizeof(uint16_t) + sizeof(uint16_t);
 
         if (write(context->pipeReply, replyBuf, bufSize) < (ssize_t)bufSize){
-            perror("write to pipe failure");
+            procError("write to pipe failure");
             ret = EXIT_FAILURE;
         }
         goto lExit;
@@ -993,7 +1019,7 @@ int sendFileContent(struct stContext *context, const char *fileName)
     *(uint32_t*)(replyBuf + sizeof(uint16_t)) = htobe32((uint32_t)fileSize);
     bufSize = sizeof(uint16_t) + sizeof(uint32_t);
     if (write(context->pipeReply, replyBuf, bufSize) < (ssize_t)bufSize){
-        perror("write to pipe failure");
+        procError("write to pipe failure");
         ret = EXIT_FAILURE;
     }
 
@@ -1008,20 +1034,20 @@ int sendFileContent(struct stContext *context, const char *fileName)
         {
             bufSize = (((uint32_t)replySize < fileSize) ? (uint32_t)replySize : fileSize);
             if (bufSize != read(fileFD, replyBuf, bufSize)){
-                perror("file read error!");
+                procError("file read error!");
                 ret = EXIT_FAILURE;
                 break;
             }
 
             if (write(context->pipeReply, replyBuf, bufSize) < (ssize_t)bufSize){
-                perror("write to pipe failure");
+                procError("write to pipe failure");
                 ret = EXIT_FAILURE;
             }
 
             fileSize -= bufSize;
         }
         else{
-            perror("Pipe write timeout or error");
+            procError("Pipe write timeout or error");
             ret = EXIT_FAILURE;
             break;
         }
@@ -1033,3 +1059,25 @@ lExit:
 
     return ret;
 }
+
+int procError(const char *msg){
+    if (IS_DAEMON){
+        syslog (LOG_ERR, "%s", msg);
+    } else {
+        perror(msg);
+    }
+}
+int procInfo(const char *msg){
+    if (IS_DAEMON){
+        syslog (LOG_NOTICE, "%s", msg);
+    } else {
+        printf("%s\n", msg);
+    }
+}
+
+int closeDeamonLog(){
+    if (IS_DAEMON){
+        closelog();
+    }
+}
+
