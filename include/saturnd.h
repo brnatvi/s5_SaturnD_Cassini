@@ -31,6 +31,8 @@
 #define TASK_STD_OUT_NAME "stdout"
 #define TASK_STD_ERR_NAME "stderr"
 
+#define TASKS_FILE        "tasks.bin"
+
 struct stString
 {
     char  *text;
@@ -102,9 +104,6 @@ int              isDirExists(const char *path);
 int              isFileExists(const char *path);
 int              writeReply(struct stContext *context, const uint8_t *buff, size_t size);
 int              execTask(struct stContext *context, struct stTask * task);
-
-
-char* concat(char* a,char* b);
 
 int              procError(const char *msg);
 int              procInfo(const char *msg);
