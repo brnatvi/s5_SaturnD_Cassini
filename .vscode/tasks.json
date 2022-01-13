@@ -10,6 +10,7 @@
                 "${workspaceFolder}/src/client-request.c",
                 "${workspaceFolder}/src/listd.c",
                 "${workspaceFolder}/src/saturnd.c",
+                "${workspaceFolder}/src/run-daemon.c",
                 "${workspaceFolder}/src/timing-text-io.c",
                 "-I",
                 "${workspaceFolder}/include/",

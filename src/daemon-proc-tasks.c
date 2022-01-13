@@ -163,7 +163,7 @@ int saveTasksToHdd(struct stContext *context){
     }
 
     // WARNING: context->tasks will be written by following pattern:
-    // for each task: struct stTask + argC + argV + count of runs + runs
+    // for each task: struct stTask + argV + count of runs + runs
     fileD = open(filePath->text, O_CREAT | O_RDWR | O_TRUNC,
                                  S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR | S_IWGRP | S_IWOTH);
 
@@ -693,7 +693,10 @@ int maintainTasks(struct stContext *context){
         struct stTask * task = (struct stTask *)(taskEl->data);
 
         time_t taskLastExecTime = mktime(&task->stExecuted);
-
+                          
+        //We are checking that task is currently ranning -> (task->lastPid > 0)
+        //We are doing "(difftime(curTime, taskLastExecTime) >= 1.0)" to let task to start, otherwise if we are calling 
+        //waitpid too fast - it may fail!
         if ((task->lastPid > 0) && (difftime(curTime, taskLastExecTime) >= 1.0)) //1 second later           
         {
             int status = 0;
@@ -744,4 +747,4 @@ int maintainTasks(struct stContext *context){
     }
 
     return ret;
-}
+}              

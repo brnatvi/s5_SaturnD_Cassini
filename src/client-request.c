@@ -365,7 +365,8 @@ int create_task(char* request, char* reply, char *minutes_str, char *hours_str, 
     }
 
     // read the answer of saturnd from reply pipe
-    // response's pattern : REPTYPE='OK' <uint16>, TASKID <uint64>
+    // response's patterns : REPTYPE='OK' <uint16>, TASKID <uint64>
+    //
     if (EXIT_SUCCESS == retCode) {
         const int lenAnswer = sizeof(uint16_t) + sizeof(uint64_t);
         uint8_t bufReply[lenAnswer];
@@ -375,7 +376,7 @@ int create_task(char* request, char* reply, char *minutes_str, char *hours_str, 
             if (0 == rezRead)  // no answer, continue to listening
             {
                 continue;
-            } else if (rezRead == lenAnswer)  // check if correct response
+            } else if (rezRead == lenAnswer)  // check if response length is expected one
             {
                 uint16_t ResCode = *(uint16_t *)bufReply;
                 uint64_t uTaskId = *(uint64_t *)(bufReply + 2);
